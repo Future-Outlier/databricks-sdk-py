@@ -6,16 +6,15 @@ import pathlib
 import platform
 import sys
 import urllib.parse
-from typing import Dict, Iterable, Optional
+from typing import Dict, Iterable, List, Optional, Tuple
 
 import requests
 
-from .azure import AzureEnvironment
 from .clock import Clock, RealClock
-from .credentials_provider import CredentialsProvider, DefaultCredentials
-from .environments import (ALL_ENVS, DEFAULT_ENVIRONMENT, Cloud,
-                           DatabricksEnvironment)
-from .oauth import OidcEndpoints
+from .credentials_provider import CredentialsStrategy, DefaultCredentials
+from .environments import (ALL_ENVS, AzureEnvironment, Cloud,
+                           DatabricksEnvironment, get_environment_for_hostname)
+from .oauth import OidcEndpoints, Token
 from .version import __version__
 
 logger = logging.getLogger('databricks.sdk')
@@ -45,6 +44,32 @@ class ConfigAttribute:
         return f"<ConfigAttribute '{self.name}' {self.transform.__name__}>"
 
 
+_DEFAULT_PRODUCT_NAME = 'unknown'
+_DEFAULT_PRODUCT_VERSION = '0.0.0'
+_STATIC_USER_AGENT: Tuple[str, str, List[str]] = (_DEFAULT_PRODUCT_NAME, _DEFAULT_PRODUCT_VERSION, [])
+
+
+def with_product(product: str, product_version: str):
+    """[INTERNAL API] Change the product name and version used in the User-Agent header."""
+    global _STATIC_USER_AGENT
+    prev_product, prev_version, prev_other_info = _STATIC_USER_AGENT
+    logger.debug(f'Changing product from {prev_product}/{prev_version} to {product}/{product_version}')
+    _STATIC_USER_AGENT = product, product_version, prev_other_info
+
+
+def with_user_agent_extra(key: str, value: str):
+    """[INTERNAL API] Add extra metadata to the User-Agent header when developing a library."""
+    global _STATIC_USER_AGENT
+    product_name, product_version, other_info = _STATIC_USER_AGENT
+    for item in other_info:
+        if item.startswith(f"{key}/"):
+            # ensure that we don't have duplicates
+            other_info.remove(item)
+            break
+    other_info.append(f"{key}/{value}")
+    _STATIC_USER_AGENT = product_name, product_version, other_info
+
+
 class Config:
     host: str = ConfigAttribute(env='DATABRICKS_HOST')
     account_id: str = ConfigAttribute(env='DATABRICKS_ACCOUNT_ID')
@@ -67,6 +92,7 @@ class Config:
     auth_type: str = ConfigAttribute(env='DATABRICKS_AUTH_TYPE')
     cluster_id: str = ConfigAttribute(env='DATABRICKS_CLUSTER_ID')
     warehouse_id: str = ConfigAttribute(env='DATABRICKS_WAREHOUSE_ID')
+    serverless_compute_id: str = ConfigAttribute(env='DATABRICKS_SERVERLESS_COMPUTE_ID')
     skip_verify: bool = ConfigAttribute()
     http_timeout_seconds: float = ConfigAttribute()
     debug_truncate_bytes: int = ConfigAttribute(env='DATABRICKS_DEBUG_TRUNCATE_BYTES')
@@ -82,15 +108,34 @@ class Config:
 
     def __init__(self,
                  *,
-                 credentials_provider: CredentialsProvider = None,
-                 product="unknown",
-                 product_version="0.0.0",
+                 # Deprecated. Use credentials_strategy instead.
+                 credentials_provider: CredentialsStrategy = None,
+                 credentials_strategy: CredentialsStrategy = None,
+                 product=_DEFAULT_PRODUCT_NAME,
+                 product_version=_DEFAULT_PRODUCT_VERSION,
                  clock: Clock = None,
                  **kwargs):
         self._header_factory = None
         self._inner = {}
+        # as in SDK for Go, pull information from global static user agent context,
+        # so that we can track additional metadata for mid-stream libraries, as well
+        # as for cases, when the downstream product is used as a library and is not
+        # configured with a proper product name and version.
+        static_product, static_version, _ = _STATIC_USER_AGENT
+        if product == _DEFAULT_PRODUCT_NAME:
+            product = static_product
+        if product_version == _DEFAULT_PRODUCT_VERSION:
+            product_version = static_version
         self._user_agent_other_info = []
-        self._credentials_provider = credentials_provider if credentials_provider else DefaultCredentials()
+        if credentials_strategy and credentials_provider:
+            raise ValueError(
+                "When providing `credentials_strategy` field, `credential_provider` cannot be specified.")
+        if credentials_provider:
+            logger.warning(
+                "parameter 'credentials_provider' is deprecated. Use 'credentials_strategy' instead.")
+        self._credentials_strategy = next(
+            s for s in [credentials_strategy, credentials_provider,
+                        DefaultCredentials()] if s is not None)
         if 'databricks_environment' in kwargs:
             self.databricks_environment = kwargs['databricks_environment']
             del kwargs['databricks_environment']
@@ -107,6 +152,9 @@ class Config:
         except ValueError as e:
             message = self.wrap_debug_info(str(e))
             raise ValueError(message) from e
+
+    def oauth_token(self) -> Token:
+        return self._credentials_strategy.oauth_token(self)
 
     def wrap_debug_info(self, message: str) -> str:
         debug_string = self.debug_string()
@@ -154,11 +202,7 @@ class Config:
         """Returns the environment based on configuration."""
         if self.databricks_environment:
             return self.databricks_environment
-        if self.host:
-            for environment in ALL_ENVS:
-                if self.host.endswith(environment.dns_zone):
-                    return environment
-        if self.azure_workspace_resource_id:
+        if not self.host and self.azure_workspace_resource_id:
             azure_env = self._get_azure_environment_name()
             for environment in ALL_ENVS:
                 if environment.cloud != Cloud.AZURE:
@@ -168,10 +212,12 @@ class Config:
                 if environment.dns_zone.startswith(".dev") or environment.dns_zone.startswith(".staging"):
                     continue
                 return environment
-        return DEFAULT_ENVIRONMENT
+        return get_environment_for_hostname(self.host)
 
     @property
     def is_azure(self) -> bool:
+        if self.azure_workspace_resource_id:
+            return True
         return self.environment.cloud == Cloud.AZURE
 
     @property
@@ -223,6 +269,12 @@ class Config:
         ]
         if len(self._user_agent_other_info) > 0:
             ua.append(' '.join(self._user_agent_other_info))
+        # as in SDK for Go, pull information from global static user agent context,
+        # so that we can track additional metadata for mid-stream libraries. this value
+        # is shared across all instances of Config objects intentionally.
+        _, _, static_info = _STATIC_USER_AGENT
+        if len(static_info) > 0:
+            ua.append(' '.join(static_info))
         if len(self._upstream_user_agent) > 0:
             ua.append(self._upstream_user_agent)
         if 'DATABRICKS_RUNTIME_VERSION' in os.environ:
@@ -439,12 +491,12 @@ class Config:
 
     def init_auth(self):
         try:
-            self._header_factory = self._credentials_provider(self)
-            self.auth_type = self._credentials_provider.auth_type()
+            self._header_factory = self._credentials_strategy(self)
+            self.auth_type = self._credentials_strategy.auth_type()
             if not self._header_factory:
                 raise ValueError('not configured')
         except ValueError as e:
-            raise ValueError(f'{self._credentials_provider.auth_type()} auth: {e}') from e
+            raise ValueError(f'{self._credentials_strategy.auth_type()} auth: {e}') from e
 
     def __repr__(self):
         return f'<{self.debug_string()}>'

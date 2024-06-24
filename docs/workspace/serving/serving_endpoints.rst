@@ -29,7 +29,7 @@
         :returns: :class:`BuildLogsResponse`
         
 
-    .. py:method:: create(name: str, config: EndpointCoreConfigInput [, rate_limits: Optional[List[RateLimit]], tags: Optional[List[EndpointTag]]]) -> Wait[ServingEndpointDetailed]
+    .. py:method:: create(name: str, config: EndpointCoreConfigInput [, rate_limits: Optional[List[RateLimit]], route_optimized: Optional[bool], tags: Optional[List[EndpointTag]]]) -> Wait[ServingEndpointDetailed]
 
         Create a new serving endpoint.
         
@@ -41,6 +41,8 @@
         :param rate_limits: List[:class:`RateLimit`] (optional)
           Rate limits to be applied to the serving endpoint. NOTE: only external and foundation model
           endpoints are supported as of now.
+        :param route_optimized: bool (optional)
+          Enable route optimization for the serving endpoint.
         :param tags: List[:class:`EndpointTag`] (optional)
           Tags to be attached to the serving endpoint and automatically propagated to billing logs.
         
@@ -49,7 +51,7 @@
           See :method:wait_get_serving_endpoint_not_updating for more details.
         
 
-    .. py:method:: create_and_wait(name: str, config: EndpointCoreConfigInput [, rate_limits: Optional[List[RateLimit]], tags: Optional[List[EndpointTag]], timeout: datetime.timedelta = 0:20:00]) -> ServingEndpointDetailed
+    .. py:method:: create_and_wait(name: str, config: EndpointCoreConfigInput [, rate_limits: Optional[List[RateLimit]], route_optimized: Optional[bool], tags: Optional[List[EndpointTag]], timeout: datetime.timedelta = 0:20:00]) -> ServingEndpointDetailed
 
 
     .. py:method:: delete(name: str)
@@ -62,7 +64,7 @@
         
         
 
-    .. py:method:: export_metrics(name: str)
+    .. py:method:: export_metrics(name: str) -> ExportMetricsResponse
 
         Get metrics of a serving endpoint.
         
@@ -72,7 +74,7 @@
         :param name: str
           The name of the serving endpoint to retrieve metrics for. This field is required.
         
-        
+        :returns: :class:`ExportMetricsResponse`
         
 
     .. py:method:: get(name: str) -> ServingEndpointDetailed
@@ -85,6 +87,19 @@
           The name of the serving endpoint. This field is required.
         
         :returns: :class:`ServingEndpointDetailed`
+        
+
+    .. py:method:: get_open_api(name: str)
+
+        Get the schema for a serving endpoint.
+        
+        Get the query schema of the serving endpoint in OpenAPI format. The schema contains information for
+        the supported paths, input and output format and datatypes.
+        
+        :param name: str
+          The name of the serving endpoint that the served model belongs to. This field is required.
+        
+        
         
 
     .. py:method:: get_permission_levels(serving_endpoint_id: str) -> GetServingEndpointPermissionLevelsResponse

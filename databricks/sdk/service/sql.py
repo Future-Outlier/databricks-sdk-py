@@ -182,7 +182,7 @@ class AlertQuery:
 
     data_source_id: Optional[str] = None
     """Data source ID maps to the ID of the data source used by the resource and is distinct from the
-    warehouse ID. [Learn more].
+    warehouse ID. [Learn more]
     
     [Learn more]: https://docs.databricks.com/api/workspace/datasources/list"""
 
@@ -769,12 +769,15 @@ class DashboardEditContent:
     """Sets the **Run as** role for the object. Must be set to one of `"viewer"` (signifying "run as
     viewer" behavior) or `"owner"` (signifying "run as owner" behavior)"""
 
+    tags: Optional[List[str]] = None
+
     def as_dict(self) -> dict:
         """Serializes the DashboardEditContent into a dictionary suitable for use as a JSON request body."""
         body = {}
         if self.dashboard_id is not None: body['dashboard_id'] = self.dashboard_id
         if self.name is not None: body['name'] = self.name
         if self.run_as_role is not None: body['run_as_role'] = self.run_as_role.value
+        if self.tags: body['tags'] = [v for v in self.tags]
         return body
 
     @classmethod
@@ -782,7 +785,8 @@ class DashboardEditContent:
         """Deserializes the DashboardEditContent from a dictionary."""
         return cls(dashboard_id=d.get('dashboard_id', None),
                    name=d.get('name', None),
-                   run_as_role=_enum(d, 'run_as_role', RunAsRole))
+                   run_as_role=_enum(d, 'run_as_role', RunAsRole),
+                   tags=d.get('tags', None))
 
 
 @dataclass
@@ -852,7 +856,7 @@ class DataSource:
 
     id: Optional[str] = None
     """Data source ID maps to the ID of the data source used by the resource and is distinct from the
-    warehouse ID. [Learn more].
+    warehouse ID. [Learn more]
     
     [Learn more]: https://docs.databricks.com/api/workspace/datasources/list"""
 
@@ -1386,8 +1390,9 @@ class ExecuteStatementRequest:
     """The SQL statement to execute. The statement can optionally be parameterized, see `parameters`."""
 
     warehouse_id: str
-    """Warehouse upon which to execute a statement. See also [What are SQL
-    warehouses?](/sql/admin/warehouse-type.html)"""
+    """Warehouse upon which to execute a statement. See also [What are SQL warehouses?]
+    
+    [What are SQL warehouses?]: https://docs.databricks.com/sql/admin/warehouse-type.html"""
 
     byte_limit: Optional[int] = None
     """Applies the given byte limit to the statement's result size. Byte counts are based on internal
@@ -2237,7 +2242,7 @@ class Query:
 
     data_source_id: Optional[str] = None
     """Data source ID maps to the ID of the data source used by the resource and is distinct from the
-    warehouse ID. [Learn more].
+    warehouse ID. [Learn more]
     
     [Learn more]: https://docs.databricks.com/api/workspace/datasources/list"""
 
@@ -2370,7 +2375,7 @@ class Query:
 class QueryEditContent:
     data_source_id: Optional[str] = None
     """Data source ID maps to the ID of the data source used by the resource and is distinct from the
-    warehouse ID. [Learn more].
+    warehouse ID. [Learn more]
     
     [Learn more]: https://docs.databricks.com/api/workspace/datasources/list"""
 
@@ -2394,6 +2399,8 @@ class QueryEditContent:
     """Sets the **Run as** role for the object. Must be set to one of `"viewer"` (signifying "run as
     viewer" behavior) or `"owner"` (signifying "run as owner" behavior)"""
 
+    tags: Optional[List[str]] = None
+
     def as_dict(self) -> dict:
         """Serializes the QueryEditContent into a dictionary suitable for use as a JSON request body."""
         body = {}
@@ -2404,6 +2411,7 @@ class QueryEditContent:
         if self.query is not None: body['query'] = self.query
         if self.query_id is not None: body['query_id'] = self.query_id
         if self.run_as_role is not None: body['run_as_role'] = self.run_as_role.value
+        if self.tags: body['tags'] = [v for v in self.tags]
         return body
 
     @classmethod
@@ -2415,7 +2423,8 @@ class QueryEditContent:
                    options=d.get('options', None),
                    query=d.get('query', None),
                    query_id=d.get('query_id', None),
-                   run_as_role=_enum(d, 'run_as_role', RunAsRole))
+                   run_as_role=_enum(d, 'run_as_role', RunAsRole),
+                   tags=d.get('tags', None))
 
 
 @dataclass
@@ -2464,7 +2473,7 @@ class QueryInfo:
     """Channel information for the SQL warehouse at the time of query execution"""
 
     duration: Optional[int] = None
-    """Total execution time of the query from the client’s point of view, in milliseconds."""
+    """Total execution time of the statement ( excluding result fetch time )."""
 
     endpoint_id: Optional[str] = None
     """Alias for `warehouse_id`."""
@@ -2765,31 +2774,41 @@ class QueryMetrics:
 
 @dataclass
 class QueryOptions:
+    catalog: Optional[str] = None
+    """The name of the catalog to execute this query in."""
+
     moved_to_trash_at: Optional[str] = None
     """The timestamp when this query was moved to trash. Only present when the `is_archived` property
     is `true`. Trashed items are deleted after thirty days."""
 
     parameters: Optional[List[Parameter]] = None
 
+    schema: Optional[str] = None
+    """The name of the schema to execute this query in."""
+
     def as_dict(self) -> dict:
         """Serializes the QueryOptions into a dictionary suitable for use as a JSON request body."""
         body = {}
+        if self.catalog is not None: body['catalog'] = self.catalog
         if self.moved_to_trash_at is not None: body['moved_to_trash_at'] = self.moved_to_trash_at
         if self.parameters: body['parameters'] = [v.as_dict() for v in self.parameters]
+        if self.schema is not None: body['schema'] = self.schema
         return body
 
     @classmethod
     def from_dict(cls, d: Dict[str, any]) -> QueryOptions:
         """Deserializes the QueryOptions from a dictionary."""
-        return cls(moved_to_trash_at=d.get('moved_to_trash_at', None),
-                   parameters=_repeated_dict(d, 'parameters', Parameter))
+        return cls(catalog=d.get('catalog', None),
+                   moved_to_trash_at=d.get('moved_to_trash_at', None),
+                   parameters=_repeated_dict(d, 'parameters', Parameter),
+                   schema=d.get('schema', None))
 
 
 @dataclass
 class QueryPostContent:
     data_source_id: Optional[str] = None
     """Data source ID maps to the ID of the data source used by the resource and is distinct from the
-    warehouse ID. [Learn more].
+    warehouse ID. [Learn more]
     
     [Learn more]: https://docs.databricks.com/api/workspace/datasources/list"""
 
@@ -2814,6 +2833,8 @@ class QueryPostContent:
     """Sets the **Run as** role for the object. Must be set to one of `"viewer"` (signifying "run as
     viewer" behavior) or `"owner"` (signifying "run as owner" behavior)"""
 
+    tags: Optional[List[str]] = None
+
     def as_dict(self) -> dict:
         """Serializes the QueryPostContent into a dictionary suitable for use as a JSON request body."""
         body = {}
@@ -2824,6 +2845,7 @@ class QueryPostContent:
         if self.parent is not None: body['parent'] = self.parent
         if self.query is not None: body['query'] = self.query
         if self.run_as_role is not None: body['run_as_role'] = self.run_as_role.value
+        if self.tags: body['tags'] = [v for v in self.tags]
         return body
 
     @classmethod
@@ -2835,7 +2857,8 @@ class QueryPostContent:
                    options=d.get('options', None),
                    parent=d.get('parent', None),
                    query=d.get('query', None),
-                   run_as_role=_enum(d, 'run_as_role', RunAsRole))
+                   run_as_role=_enum(d, 'run_as_role', RunAsRole),
+                   tags=d.get('tags', None))
 
 
 class QueryStatementType(Enum):
@@ -3251,8 +3274,10 @@ class StatementParameterListItem:
     type: Optional[str] = None
     """The data type, given as a string. For example: `INT`, `STRING`, `DECIMAL(10,2)`. If no type is
     given the type is assumed to be `STRING`. Complex types, such as `ARRAY`, `MAP`, and `STRUCT`
-    are not supported. For valid types, refer to the section [Data
-    types](/sql/language-manual/functions/cast.html) of the SQL language reference."""
+    are not supported. For valid types, refer to the section [Data types] of the SQL language
+    reference.
+    
+    [Data types]: https://docs.databricks.com/sql/language-manual/functions/cast.html"""
 
     value: Optional[str] = None
     """The value to substitute, represented as a string. If omitted, the value is interpreted as NULL."""
@@ -3572,6 +3597,8 @@ class Visualization:
     """The options object varies widely from one visualization type to the next and is unsupported.
     Databricks does not recommend modifying visualization settings in JSON."""
 
+    query: Optional[Query] = None
+
     type: Optional[str] = None
     """The type of visualization: chart, table, pivot table, and so on."""
 
@@ -3585,6 +3612,7 @@ class Visualization:
         if self.id is not None: body['id'] = self.id
         if self.name is not None: body['name'] = self.name
         if self.options: body['options'] = self.options
+        if self.query: body['query'] = self.query.as_dict()
         if self.type is not None: body['type'] = self.type
         if self.updated_at is not None: body['updated_at'] = self.updated_at
         return body
@@ -3597,6 +3625,7 @@ class Visualization:
                    id=d.get('id', None),
                    name=d.get('name', None),
                    options=d.get('options', None),
+                   query=_from_dict(d, 'query', Query),
                    type=d.get('type', None),
                    updated_at=d.get('updated_at', None))
 
@@ -3933,7 +3962,11 @@ class AlertsAPI:
     """The alerts API can be used to perform CRUD operations on alerts. An alert is a Databricks SQL object that
     periodically runs a query, evaluates a condition of its result, and notifies one or more users and/or
     notification destinations if the condition was met. Alerts can be scheduled using the `sql_task` type of
-    the Jobs API, e.g. :method:jobs/create."""
+    the Jobs API, e.g. :method:jobs/create.
+    
+    **Note**: A new version of the Databricks SQL API will soon be available. [Learn more]
+    
+    [Learn more]: https://docs.databricks.com/en/whats-coming.html#updates-to-the-databricks-sql-api-for-managing-queries-alerts-and-data-sources"""
 
     def __init__(self, api_client):
         self._api = api_client
@@ -3949,6 +3982,10 @@ class AlertsAPI:
         
         Creates an alert. An alert is a Databricks SQL object that periodically runs a query, evaluates a
         condition of its result, and notifies users or notification destinations if the condition was met.
+        
+        **Note**: A new version of the Databricks SQL API will soon be available. [Learn more]
+        
+        [Learn more]: https://docs.databricks.com/en/whats-coming.html#updates-to-the-databricks-sql-api-for-managing-queries-alerts-and-data-sources
         
         :param name: str
           Name of the alert.
@@ -3978,8 +4015,12 @@ class AlertsAPI:
     def delete(self, alert_id: str):
         """Delete an alert.
         
-        Deletes an alert. Deleted alerts are no longer accessible and cannot be restored. **Note:** Unlike
+        Deletes an alert. Deleted alerts are no longer accessible and cannot be restored. **Note**: Unlike
         queries and dashboards, alerts cannot be moved to the trash.
+        
+        **Note**: A new version of the Databricks SQL API will soon be available. [Learn more]
+        
+        [Learn more]: https://docs.databricks.com/en/whats-coming.html#updates-to-the-databricks-sql-api-for-managing-queries-alerts-and-data-sources
         
         :param alert_id: str
         
@@ -3995,6 +4036,10 @@ class AlertsAPI:
         
         Gets an alert.
         
+        **Note**: A new version of the Databricks SQL API will soon be available. [Learn more]
+        
+        [Learn more]: https://docs.databricks.com/en/whats-coming.html#updates-to-the-databricks-sql-api-for-managing-queries-alerts-and-data-sources
+        
         :param alert_id: str
         
         :returns: :class:`Alert`
@@ -4009,6 +4054,10 @@ class AlertsAPI:
         """Get alerts.
         
         Gets a list of alerts.
+        
+        **Note**: A new version of the Databricks SQL API will soon be available. [Learn more]
+        
+        [Learn more]: https://docs.databricks.com/en/whats-coming.html#updates-to-the-databricks-sql-api-for-managing-queries-alerts-and-data-sources
         
         :returns: Iterator over :class:`Alert`
         """
@@ -4028,6 +4077,10 @@ class AlertsAPI:
         """Update an alert.
         
         Updates an alert.
+        
+        **Note**: A new version of the Databricks SQL API will soon be available. [Learn more]
+        
+        [Learn more]: https://docs.databricks.com/en/whats-coming.html#updates-to-the-databricks-sql-api-for-managing-queries-alerts-and-data-sources
         
         :param alert_id: str
         :param name: str
@@ -4230,8 +4283,8 @@ class DashboardsAPI:
         
         Fetch a paginated list of dashboard objects.
         
-        ### **Warning: Calling this API concurrently 10 or more times could result in throttling, service
-        degradation, or a temporary ban.**
+        **Warning**: Calling this API concurrently 10 or more times could result in throttling, service
+        degradation, or a temporary ban.
         
         :param order: :class:`ListOrder` (optional)
           Name of dashboard attribute to order by.
@@ -4286,7 +4339,8 @@ class DashboardsAPI:
                dashboard_id: str,
                *,
                name: Optional[str] = None,
-               run_as_role: Optional[RunAsRole] = None) -> Dashboard:
+               run_as_role: Optional[RunAsRole] = None,
+               tags: Optional[List[str]] = None) -> Dashboard:
         """Change a dashboard definition.
         
         Modify this dashboard definition. This operation only affects attributes of the dashboard object. It
@@ -4300,12 +4354,14 @@ class DashboardsAPI:
         :param run_as_role: :class:`RunAsRole` (optional)
           Sets the **Run as** role for the object. Must be set to one of `"viewer"` (signifying "run as
           viewer" behavior) or `"owner"` (signifying "run as owner" behavior)
+        :param tags: List[str] (optional)
         
         :returns: :class:`Dashboard`
         """
         body = {}
         if name is not None: body['name'] = name
         if run_as_role is not None: body['run_as_role'] = run_as_role.value
+        if tags is not None: body['tags'] = [v for v in tags]
         headers = {'Accept': 'application/json', 'Content-Type': 'application/json', }
 
         res = self._api.do('POST',
@@ -4322,7 +4378,11 @@ class DataSourcesAPI:
     
     This API does not support searches. It returns the full list of SQL warehouses in your workspace. We
     advise you to use any text editor, REST client, or `grep` to search the response from this API for the
-    name of your SQL warehouse as it appears in Databricks SQL."""
+    name of your SQL warehouse as it appears in Databricks SQL.
+    
+    **Note**: A new version of the Databricks SQL API will soon be available. [Learn more]
+    
+    [Learn more]: https://docs.databricks.com/en/whats-coming.html#updates-to-the-databricks-sql-api-for-managing-queries-alerts-and-data-sources"""
 
     def __init__(self, api_client):
         self._api = api_client
@@ -4333,6 +4393,10 @@ class DataSourcesAPI:
         Retrieves a full list of SQL warehouses available in this workspace. All fields that appear in this
         API response are enumerated for clarity. However, you need only a SQL warehouse's `id` to create new
         queries against it.
+        
+        **Note**: A new version of the Databricks SQL API will soon be available. [Learn more]
+        
+        [Learn more]: https://docs.databricks.com/en/whats-coming.html#updates-to-the-databricks-sql-api-for-managing-queries-alerts-and-data-sources
         
         :returns: Iterator over :class:`DataSource`
         """
@@ -4354,7 +4418,11 @@ class DbsqlPermissionsAPI:
     
     - `CAN_RUN`: Allows read access and run access (superset of `CAN_VIEW`)
     
-    - `CAN_MANAGE`: Allows all actions: read, run, edit, delete, modify permissions (superset of `CAN_RUN`)"""
+    - `CAN_MANAGE`: Allows all actions: read, run, edit, delete, modify permissions (superset of `CAN_RUN`)
+    
+    **Note**: A new version of the Databricks SQL API will soon be available. [Learn more]
+    
+    [Learn more]: https://docs.databricks.com/en/whats-coming.html#updates-to-the-databricks-sql-api-for-managing-queries-alerts-and-data-sources"""
 
     def __init__(self, api_client):
         self._api = api_client
@@ -4363,6 +4431,10 @@ class DbsqlPermissionsAPI:
         """Get object ACL.
         
         Gets a JSON representation of the access control list (ACL) for a specified object.
+        
+        **Note**: A new version of the Databricks SQL API will soon be available. [Learn more]
+        
+        [Learn more]: https://docs.databricks.com/en/whats-coming.html#updates-to-the-databricks-sql-api-for-managing-queries-alerts-and-data-sources
         
         :param object_type: :class:`ObjectTypePlural`
           The type of object permissions to check.
@@ -4388,6 +4460,10 @@ class DbsqlPermissionsAPI:
         
         Sets the access control list (ACL) for a specified object. This operation will complete rewrite the
         ACL.
+        
+        **Note**: A new version of the Databricks SQL API will soon be available. [Learn more]
+        
+        [Learn more]: https://docs.databricks.com/en/whats-coming.html#updates-to-the-databricks-sql-api-for-managing-queries-alerts-and-data-sources
         
         :param object_type: :class:`ObjectTypePlural`
           The type of object permission to set.
@@ -4417,6 +4493,10 @@ class DbsqlPermissionsAPI:
         
         Transfers ownership of a dashboard, query, or alert to an active user. Requires an admin API key.
         
+        **Note**: A new version of the Databricks SQL API will soon be available. [Learn more]
+        
+        [Learn more]: https://docs.databricks.com/en/whats-coming.html#updates-to-the-databricks-sql-api-for-managing-queries-alerts-and-data-sources
+        
         :param object_type: :class:`OwnableObjectType`
           The type of object on which to change ownership.
         :param object_id: :class:`TransferOwnershipObjectId`
@@ -4440,7 +4520,11 @@ class DbsqlPermissionsAPI:
 class QueriesAPI:
     """These endpoints are used for CRUD operations on query definitions. Query definitions include the target
     SQL warehouse, query text, name, description, tags, parameters, and visualizations. Queries can be
-    scheduled using the `sql_task` type of the Jobs API, e.g. :method:jobs/create."""
+    scheduled using the `sql_task` type of the Jobs API, e.g. :method:jobs/create.
+    
+    **Note**: A new version of the Databricks SQL API will soon be available. [Learn more]
+    
+    [Learn more]: https://docs.databricks.com/en/whats-coming.html#updates-to-the-databricks-sql-api-for-managing-queries-alerts-and-data-sources"""
 
     def __init__(self, api_client):
         self._api = api_client
@@ -4453,7 +4537,8 @@ class QueriesAPI:
                options: Optional[Any] = None,
                parent: Optional[str] = None,
                query: Optional[str] = None,
-               run_as_role: Optional[RunAsRole] = None) -> Query:
+               run_as_role: Optional[RunAsRole] = None,
+               tags: Optional[List[str]] = None) -> Query:
         """Create a new query definition.
         
         Creates a new query definition. Queries created with this endpoint belong to the authenticated user
@@ -4465,9 +4550,13 @@ class QueriesAPI:
         
         **Note**: You cannot add a visualization until you create the query.
         
+        **Note**: A new version of the Databricks SQL API will soon be available. [Learn more]
+        
+        [Learn more]: https://docs.databricks.com/en/whats-coming.html#updates-to-the-databricks-sql-api-for-managing-queries-alerts-and-data-sources
+        
         :param data_source_id: str (optional)
           Data source ID maps to the ID of the data source used by the resource and is distinct from the
-          warehouse ID. [Learn more].
+          warehouse ID. [Learn more]
           
           [Learn more]: https://docs.databricks.com/api/workspace/datasources/list
         :param description: str (optional)
@@ -4485,6 +4574,7 @@ class QueriesAPI:
         :param run_as_role: :class:`RunAsRole` (optional)
           Sets the **Run as** role for the object. Must be set to one of `"viewer"` (signifying "run as
           viewer" behavior) or `"owner"` (signifying "run as owner" behavior)
+        :param tags: List[str] (optional)
         
         :returns: :class:`Query`
         """
@@ -4496,6 +4586,7 @@ class QueriesAPI:
         if parent is not None: body['parent'] = parent
         if query is not None: body['query'] = query
         if run_as_role is not None: body['run_as_role'] = run_as_role.value
+        if tags is not None: body['tags'] = [v for v in tags]
         headers = {'Accept': 'application/json', 'Content-Type': 'application/json', }
 
         res = self._api.do('POST', '/api/2.0/preview/sql/queries', body=body, headers=headers)
@@ -4506,6 +4597,10 @@ class QueriesAPI:
         
         Moves a query to the trash. Trashed queries immediately disappear from searches and list views, and
         they cannot be used for alerts. The trash is deleted after 30 days.
+        
+        **Note**: A new version of the Databricks SQL API will soon be available. [Learn more]
+        
+        [Learn more]: https://docs.databricks.com/en/whats-coming.html#updates-to-the-databricks-sql-api-for-managing-queries-alerts-and-data-sources
         
         :param query_id: str
         
@@ -4521,6 +4616,10 @@ class QueriesAPI:
         
         Retrieve a query object definition along with contextual permissions information about the currently
         authenticated user.
+        
+        **Note**: A new version of the Databricks SQL API will soon be available. [Learn more]
+        
+        [Learn more]: https://docs.databricks.com/en/whats-coming.html#updates-to-the-databricks-sql-api-for-managing-queries-alerts-and-data-sources
         
         :param query_id: str
         
@@ -4542,8 +4641,12 @@ class QueriesAPI:
         
         Gets a list of queries. Optionally, this list can be filtered by a search term.
         
-        ### **Warning: Calling this API concurrently 10 or more times could result in throttling, service
-        degradation, or a temporary ban.**
+        **Warning**: Calling this API concurrently 10 or more times could result in throttling, service
+        degradation, or a temporary ban.
+        
+        **Note**: A new version of the Databricks SQL API will soon be available. [Learn more]
+        
+        [Learn more]: https://docs.databricks.com/en/whats-coming.html#updates-to-the-databricks-sql-api-for-managing-queries-alerts-and-data-sources
         
         :param order: str (optional)
           Name of query attribute to order by. Default sort order is ascending. Append a dash (`-`) to order
@@ -4598,6 +4701,10 @@ class QueriesAPI:
         Restore a query that has been moved to the trash. A restored query appears in list views and searches.
         You can use restored queries for alerts.
         
+        **Note**: A new version of the Databricks SQL API will soon be available. [Learn more]
+        
+        [Learn more]: https://docs.databricks.com/en/whats-coming.html#updates-to-the-databricks-sql-api-for-managing-queries-alerts-and-data-sources
+        
         :param query_id: str
         
         
@@ -4615,17 +4722,22 @@ class QueriesAPI:
                name: Optional[str] = None,
                options: Optional[Any] = None,
                query: Optional[str] = None,
-               run_as_role: Optional[RunAsRole] = None) -> Query:
+               run_as_role: Optional[RunAsRole] = None,
+               tags: Optional[List[str]] = None) -> Query:
         """Change a query definition.
         
         Modify this query definition.
         
         **Note**: You cannot undo this operation.
         
+        **Note**: A new version of the Databricks SQL API will soon be available. [Learn more]
+        
+        [Learn more]: https://docs.databricks.com/en/whats-coming.html#updates-to-the-databricks-sql-api-for-managing-queries-alerts-and-data-sources
+        
         :param query_id: str
         :param data_source_id: str (optional)
           Data source ID maps to the ID of the data source used by the resource and is distinct from the
-          warehouse ID. [Learn more].
+          warehouse ID. [Learn more]
           
           [Learn more]: https://docs.databricks.com/api/workspace/datasources/list
         :param description: str (optional)
@@ -4641,6 +4753,7 @@ class QueriesAPI:
         :param run_as_role: :class:`RunAsRole` (optional)
           Sets the **Run as** role for the object. Must be set to one of `"viewer"` (signifying "run as
           viewer" behavior) or `"owner"` (signifying "run as owner" behavior)
+        :param tags: List[str] (optional)
         
         :returns: :class:`Query`
         """
@@ -4651,6 +4764,7 @@ class QueriesAPI:
         if options is not None: body['options'] = options
         if query is not None: body['query'] = query
         if run_as_role is not None: body['run_as_role'] = run_as_role.value
+        if tags is not None: body['tags'] = [v for v in tags]
         headers = {'Accept': 'application/json', 'Content-Type': 'application/json', }
 
         res = self._api.do('POST', f'/api/2.0/preview/sql/queries/{query_id}', body=body, headers=headers)
@@ -4767,6 +4881,7 @@ class QueryVisualizationsAPI:
                description: Optional[str] = None,
                name: Optional[str] = None,
                options: Optional[Any] = None,
+               query: Optional[Query] = None,
                type: Optional[str] = None,
                updated_at: Optional[str] = None) -> Visualization:
         """Edit existing visualization.
@@ -4781,6 +4896,7 @@ class QueryVisualizationsAPI:
         :param options: Any (optional)
           The options object varies widely from one visualization type to the next and is unsupported.
           Databricks does not recommend modifying visualization settings in JSON.
+        :param query: :class:`Query` (optional)
         :param type: str (optional)
           The type of visualization: chart, table, pivot table, and so on.
         :param updated_at: str (optional)
@@ -4792,6 +4908,7 @@ class QueryVisualizationsAPI:
         if description is not None: body['description'] = description
         if name is not None: body['name'] = name
         if options is not None: body['options'] = options
+        if query is not None: body['query'] = query.as_dict()
         if type is not None: body['type'] = type
         if updated_at is not None: body['updated_at'] = updated_at
         headers = {'Accept': 'application/json', 'Content-Type': 'application/json', }
@@ -4922,8 +5039,9 @@ class StatementExecutionAPI:
         :param statement: str
           The SQL statement to execute. The statement can optionally be parameterized, see `parameters`.
         :param warehouse_id: str
-          Warehouse upon which to execute a statement. See also [What are SQL
-          warehouses?](/sql/admin/warehouse-type.html)
+          Warehouse upon which to execute a statement. See also [What are SQL warehouses?]
+          
+          [What are SQL warehouses?]: https://docs.databricks.com/sql/admin/warehouse-type.html
         :param byte_limit: int (optional)
           Applies the given byte limit to the statement's result size. Byte counts are based on internal data
           representations and might not match the final size in the requested `format`. If the result was

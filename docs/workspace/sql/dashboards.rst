@@ -123,8 +123,8 @@
         
         Fetch a paginated list of dashboard objects.
         
-        ### **Warning: Calling this API concurrently 10 or more times could result in throttling, service
-        degradation, or a temporary ban.**
+        **Warning**: Calling this API concurrently 10 or more times could result in throttling, service
+        degradation, or a temporary ban.
         
         :param order: :class:`ListOrder` (optional)
           Name of dashboard attribute to order by.
@@ -167,7 +167,7 @@
         
         
 
-    .. py:method:: update(dashboard_id: str [, name: Optional[str], run_as_role: Optional[RunAsRole]]) -> Dashboard
+    .. py:method:: update(dashboard_id: str [, name: Optional[str], run_as_role: Optional[RunAsRole], tags: Optional[List[str]]]) -> Dashboard
 
         Change a dashboard definition.
         
@@ -182,6 +182,7 @@
         :param run_as_role: :class:`RunAsRole` (optional)
           Sets the **Run as** role for the object. Must be set to one of `"viewer"` (signifying "run as
           viewer" behavior) or `"owner"` (signifying "run as owner" behavior)
+        :param tags: List[str] (optional)
         
         :returns: :class:`Dashboard`
         

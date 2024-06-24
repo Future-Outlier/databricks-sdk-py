@@ -320,7 +320,34 @@ class AwsIamRoleResponse:
 
 
 @dataclass
-class AzureManagedIdentity:
+class AzureManagedIdentityRequest:
+    access_connector_id: str
+    """The Azure resource ID of the Azure Databricks Access Connector. Use the format
+    /subscriptions/{guid}/resourceGroups/{rg-name}/providers/Microsoft.Databricks/accessConnectors/{connector-name}."""
+
+    managed_identity_id: Optional[str] = None
+    """The Azure resource ID of the managed identity. Use the format
+    /subscriptions/{guid}/resourceGroups/{rg-name}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{identity-name}.
+    This is only available for user-assgined identities. For system-assigned identities, the
+    access_connector_id is used to identify the identity. If this field is not provided, then we
+    assume the AzureManagedIdentity is for a system-assigned identity."""
+
+    def as_dict(self) -> dict:
+        """Serializes the AzureManagedIdentityRequest into a dictionary suitable for use as a JSON request body."""
+        body = {}
+        if self.access_connector_id is not None: body['access_connector_id'] = self.access_connector_id
+        if self.managed_identity_id is not None: body['managed_identity_id'] = self.managed_identity_id
+        return body
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, any]) -> AzureManagedIdentityRequest:
+        """Deserializes the AzureManagedIdentityRequest from a dictionary."""
+        return cls(access_connector_id=d.get('access_connector_id', None),
+                   managed_identity_id=d.get('managed_identity_id', None))
+
+
+@dataclass
+class AzureManagedIdentityResponse:
     access_connector_id: str
     """The Azure resource ID of the Azure Databricks Access Connector. Use the format
     /subscriptions/{guid}/resourceGroups/{rg-name}/providers/Microsoft.Databricks/accessConnectors/{connector-name}."""
@@ -336,7 +363,7 @@ class AzureManagedIdentity:
     assume the AzureManagedIdentity is for a system-assigned identity."""
 
     def as_dict(self) -> dict:
-        """Serializes the AzureManagedIdentity into a dictionary suitable for use as a JSON request body."""
+        """Serializes the AzureManagedIdentityResponse into a dictionary suitable for use as a JSON request body."""
         body = {}
         if self.access_connector_id is not None: body['access_connector_id'] = self.access_connector_id
         if self.credential_id is not None: body['credential_id'] = self.credential_id
@@ -344,8 +371,8 @@ class AzureManagedIdentity:
         return body
 
     @classmethod
-    def from_dict(cls, d: Dict[str, any]) -> AzureManagedIdentity:
-        """Deserializes the AzureManagedIdentity from a dictionary."""
+    def from_dict(cls, d: Dict[str, any]) -> AzureManagedIdentityResponse:
+        """Deserializes the AzureManagedIdentityResponse from a dictionary."""
         return cls(access_connector_id=d.get('access_connector_id', None),
                    credential_id=d.get('credential_id', None),
                    managed_identity_id=d.get('managed_identity_id', None))
@@ -421,7 +448,7 @@ class CatalogInfo:
     full_name: Optional[str] = None
     """The full name of the catalog. Corresponds with the name field."""
 
-    isolation_mode: Optional[IsolationMode] = None
+    isolation_mode: Optional[CatalogIsolationMode] = None
     """Whether the current securable is accessible from all workspaces or a specific set of workspaces."""
 
     metastore_id: Optional[str] = None
@@ -514,7 +541,7 @@ class CatalogInfo:
                    enable_predictive_optimization=_enum(d, 'enable_predictive_optimization',
                                                         EnablePredictiveOptimization),
                    full_name=d.get('full_name', None),
-                   isolation_mode=_enum(d, 'isolation_mode', IsolationMode),
+                   isolation_mode=_enum(d, 'isolation_mode', CatalogIsolationMode),
                    metastore_id=d.get('metastore_id', None),
                    name=d.get('name', None),
                    options=d.get('options', None),
@@ -544,11 +571,16 @@ class CatalogInfoSecurableKind(Enum):
     CATALOG_FOREIGN_SQLDW = 'CATALOG_FOREIGN_SQLDW'
     CATALOG_FOREIGN_SQLSERVER = 'CATALOG_FOREIGN_SQLSERVER'
     CATALOG_INTERNAL = 'CATALOG_INTERNAL'
-    CATALOG_ONLINE = 'CATALOG_ONLINE'
-    CATALOG_ONLINE_INDEX = 'CATALOG_ONLINE_INDEX'
     CATALOG_STANDARD = 'CATALOG_STANDARD'
     CATALOG_SYSTEM = 'CATALOG_SYSTEM'
     CATALOG_SYSTEM_DELTASHARING = 'CATALOG_SYSTEM_DELTASHARING'
+
+
+class CatalogIsolationMode(Enum):
+    """Whether the current securable is accessible from all workspaces or a specific set of workspaces."""
+
+    ISOLATED = 'ISOLATED'
+    OPEN = 'OPEN'
 
 
 class CatalogType(Enum):
@@ -1195,8 +1227,9 @@ class CreateMetastore:
     """The user-specified name of the metastore."""
 
     region: Optional[str] = None
-    """Cloud region which the metastore serves (e.g., `us-west-2`, `westus`). If this field is omitted,
-    the region of the workspace receiving the request will be used."""
+    """Cloud region which the metastore serves (e.g., `us-west-2`, `westus`). The field can be omitted
+    in the __workspace-level__ __API__ but not in the __account-level__ __API__. If this field is
+    omitted, the region of the workspace receiving the request will be used."""
 
     storage_root: Optional[str] = None
     """The storage root URL for metastore"""
@@ -1256,7 +1289,7 @@ class CreateMonitor:
     """Name of the baseline table from which drift metrics are computed from. Columns in the monitored
     table should also be present in the baseline table."""
 
-    custom_metrics: Optional[List[MonitorCustomMetric]] = None
+    custom_metrics: Optional[List[MonitorMetric]] = None
     """Custom metrics to compute on the monitored table. These can be aggregate metrics, derived
     metrics (from already computed aggregate metrics), or drift metrics (comparing metrics across
     time windows)."""
@@ -1264,13 +1297,10 @@ class CreateMonitor:
     data_classification_config: Optional[MonitorDataClassificationConfig] = None
     """The data classification config for the monitor."""
 
-    full_name: Optional[str] = None
-    """Full name of the table."""
-
-    inference_log: Optional[MonitorInferenceLogProfileType] = None
+    inference_log: Optional[MonitorInferenceLog] = None
     """Configuration for monitoring inference logs."""
 
-    notifications: Optional[MonitorNotificationsConfig] = None
+    notifications: Optional[MonitorNotifications] = None
     """The notification settings for the monitor."""
 
     schedule: Optional[MonitorCronSchedule] = None
@@ -1284,10 +1314,13 @@ class CreateMonitor:
     expression independently, resulting in a separate slice for each predicate and its complements.
     For high-cardinality columns, only the top 100 unique values by frequency will generate slices."""
 
-    snapshot: Optional[MonitorSnapshotProfileType] = None
+    snapshot: Optional[MonitorSnapshot] = None
     """Configuration for monitoring snapshot tables."""
 
-    time_series: Optional[MonitorTimeSeriesProfileType] = None
+    table_name: Optional[str] = None
+    """Full name of the table."""
+
+    time_series: Optional[MonitorTimeSeries] = None
     """Configuration for monitoring time series tables."""
 
     warehouse_id: Optional[str] = None
@@ -1302,7 +1335,6 @@ class CreateMonitor:
         if self.custom_metrics: body['custom_metrics'] = [v.as_dict() for v in self.custom_metrics]
         if self.data_classification_config:
             body['data_classification_config'] = self.data_classification_config.as_dict()
-        if self.full_name is not None: body['full_name'] = self.full_name
         if self.inference_log: body['inference_log'] = self.inference_log.as_dict()
         if self.notifications: body['notifications'] = self.notifications.as_dict()
         if self.output_schema_name is not None: body['output_schema_name'] = self.output_schema_name
@@ -1311,6 +1343,7 @@ class CreateMonitor:
             body['skip_builtin_dashboard'] = self.skip_builtin_dashboard
         if self.slicing_exprs: body['slicing_exprs'] = [v for v in self.slicing_exprs]
         if self.snapshot: body['snapshot'] = self.snapshot.as_dict()
+        if self.table_name is not None: body['table_name'] = self.table_name
         if self.time_series: body['time_series'] = self.time_series.as_dict()
         if self.warehouse_id is not None: body['warehouse_id'] = self.warehouse_id
         return body
@@ -1320,18 +1353,18 @@ class CreateMonitor:
         """Deserializes the CreateMonitor from a dictionary."""
         return cls(assets_dir=d.get('assets_dir', None),
                    baseline_table_name=d.get('baseline_table_name', None),
-                   custom_metrics=_repeated_dict(d, 'custom_metrics', MonitorCustomMetric),
+                   custom_metrics=_repeated_dict(d, 'custom_metrics', MonitorMetric),
                    data_classification_config=_from_dict(d, 'data_classification_config',
                                                          MonitorDataClassificationConfig),
-                   full_name=d.get('full_name', None),
-                   inference_log=_from_dict(d, 'inference_log', MonitorInferenceLogProfileType),
-                   notifications=_from_dict(d, 'notifications', MonitorNotificationsConfig),
+                   inference_log=_from_dict(d, 'inference_log', MonitorInferenceLog),
+                   notifications=_from_dict(d, 'notifications', MonitorNotifications),
                    output_schema_name=d.get('output_schema_name', None),
                    schedule=_from_dict(d, 'schedule', MonitorCronSchedule),
                    skip_builtin_dashboard=d.get('skip_builtin_dashboard', None),
                    slicing_exprs=d.get('slicing_exprs', None),
-                   snapshot=_from_dict(d, 'snapshot', MonitorSnapshotProfileType),
-                   time_series=_from_dict(d, 'time_series', MonitorTimeSeriesProfileType),
+                   snapshot=_from_dict(d, 'snapshot', MonitorSnapshot),
+                   table_name=d.get('table_name', None),
+                   time_series=_from_dict(d, 'time_series', MonitorTimeSeries),
                    warehouse_id=d.get('warehouse_id', None))
 
 
@@ -1454,7 +1487,7 @@ class CreateStorageCredential:
     aws_iam_role: Optional[AwsIamRoleRequest] = None
     """The AWS IAM role configuration."""
 
-    azure_managed_identity: Optional[AzureManagedIdentity] = None
+    azure_managed_identity: Optional[AzureManagedIdentityRequest] = None
     """The Azure managed identity configuration."""
 
     azure_service_principal: Optional[AzureServicePrincipal] = None
@@ -1467,7 +1500,7 @@ class CreateStorageCredential:
     """Comment associated with the credential."""
 
     databricks_gcp_service_account: Optional[DatabricksGcpServiceAccountRequest] = None
-    """The <Databricks> managed GCP service account configuration."""
+    """The Databricks managed GCP service account configuration."""
 
     read_only: Optional[bool] = None
     """Whether the storage credential is only usable for read operations."""
@@ -1495,7 +1528,8 @@ class CreateStorageCredential:
     def from_dict(cls, d: Dict[str, any]) -> CreateStorageCredential:
         """Deserializes the CreateStorageCredential from a dictionary."""
         return cls(aws_iam_role=_from_dict(d, 'aws_iam_role', AwsIamRoleRequest),
-                   azure_managed_identity=_from_dict(d, 'azure_managed_identity', AzureManagedIdentity),
+                   azure_managed_identity=_from_dict(d, 'azure_managed_identity',
+                                                     AzureManagedIdentityRequest),
                    azure_service_principal=_from_dict(d, 'azure_service_principal', AzureServicePrincipal),
                    cloudflare_api_token=_from_dict(d, 'cloudflare_api_token', CloudflareApiToken),
                    comment=d.get('comment', None),
@@ -1599,14 +1633,28 @@ class DataSourceFormat(Enum):
     """Data source format"""
 
     AVRO = 'AVRO'
+    BIGQUERY_FORMAT = 'BIGQUERY_FORMAT'
     CSV = 'CSV'
+    DATABRICKS_FORMAT = 'DATABRICKS_FORMAT'
     DELTA = 'DELTA'
     DELTASHARING = 'DELTASHARING'
+    HIVE_CUSTOM = 'HIVE_CUSTOM'
+    HIVE_SERDE = 'HIVE_SERDE'
     JSON = 'JSON'
+    MYSQL_FORMAT = 'MYSQL_FORMAT'
+    NETSUITE_FORMAT = 'NETSUITE_FORMAT'
     ORC = 'ORC'
     PARQUET = 'PARQUET'
+    POSTGRESQL_FORMAT = 'POSTGRESQL_FORMAT'
+    REDSHIFT_FORMAT = 'REDSHIFT_FORMAT'
+    SALESFORCE_FORMAT = 'SALESFORCE_FORMAT'
+    SNOWFLAKE_FORMAT = 'SNOWFLAKE_FORMAT'
+    SQLDW_FORMAT = 'SQLDW_FORMAT'
+    SQLSERVER_FORMAT = 'SQLSERVER_FORMAT'
     TEXT = 'TEXT'
     UNITY_CATALOG = 'UNITY_CATALOG'
+    VECTOR_INDEX_FORMAT = 'VECTOR_INDEX_FORMAT'
+    WORKDAY_RAAS_FORMAT = 'WORKDAY_RAAS_FORMAT'
 
 
 @dataclass
@@ -1750,14 +1798,6 @@ class DisableResponse:
         return cls()
 
 
-class DisableSchemaName(Enum):
-
-    ACCESS = 'access'
-    BILLING = 'billing'
-    LINEAGE = 'lineage'
-    OPERATIONAL_DATA = 'operational_data'
-
-
 @dataclass
 class EffectivePermissionsList:
     privilege_assignments: Optional[List[EffectivePrivilegeAssignment]] = None
@@ -1888,14 +1928,6 @@ class EnableResponse:
         return cls()
 
 
-class EnableSchemaName(Enum):
-
-    ACCESS = 'access'
-    BILLING = 'billing'
-    LINEAGE = 'lineage'
-    OPERATIONAL_DATA = 'operational_data'
-
-
 @dataclass
 class EncryptionDetails:
     """Encryption options that apply to clients connecting to cloud storage."""
@@ -1942,6 +1974,9 @@ class ExternalLocationInfo:
     encryption_details: Optional[EncryptionDetails] = None
     """Encryption options that apply to clients connecting to cloud storage."""
 
+    isolation_mode: Optional[IsolationMode] = None
+    """Whether the current securable is accessible from all workspaces or a specific set of workspaces."""
+
     metastore_id: Optional[str] = None
     """Unique identifier of metastore hosting the external location."""
 
@@ -1974,6 +2009,7 @@ class ExternalLocationInfo:
         if self.credential_id is not None: body['credential_id'] = self.credential_id
         if self.credential_name is not None: body['credential_name'] = self.credential_name
         if self.encryption_details: body['encryption_details'] = self.encryption_details.as_dict()
+        if self.isolation_mode is not None: body['isolation_mode'] = self.isolation_mode.value
         if self.metastore_id is not None: body['metastore_id'] = self.metastore_id
         if self.name is not None: body['name'] = self.name
         if self.owner is not None: body['owner'] = self.owner
@@ -1994,6 +2030,7 @@ class ExternalLocationInfo:
                    credential_id=d.get('credential_id', None),
                    credential_name=d.get('credential_name', None),
                    encryption_details=_from_dict(d, 'encryption_details', EncryptionDetails),
+                   isolation_mode=_enum(d, 'isolation_mode', IsolationMode),
                    metastore_id=d.get('metastore_id', None),
                    name=d.get('name', None),
                    owner=d.get('owner', None),
@@ -2503,8 +2540,8 @@ class GetMetastoreSummaryResponseDeltaSharingScope(Enum):
 class IsolationMode(Enum):
     """Whether the current securable is accessible from all workspaces or a specific set of workspaces."""
 
-    ISOLATED = 'ISOLATED'
-    OPEN = 'OPEN'
+    ISOLATION_MODE_ISOLATED = 'ISOLATION_MODE_ISOLATED'
+    ISOLATION_MODE_OPEN = 'ISOLATION_MODE_OPEN'
 
 
 @dataclass
@@ -2526,20 +2563,44 @@ class ListAccountMetastoreAssignmentsResponse:
 
 
 @dataclass
+class ListAccountStorageCredentialsResponse:
+    storage_credentials: Optional[List[StorageCredentialInfo]] = None
+    """An array of metastore storage credentials."""
+
+    def as_dict(self) -> dict:
+        """Serializes the ListAccountStorageCredentialsResponse into a dictionary suitable for use as a JSON request body."""
+        body = {}
+        if self.storage_credentials:
+            body['storage_credentials'] = [v.as_dict() for v in self.storage_credentials]
+        return body
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, any]) -> ListAccountStorageCredentialsResponse:
+        """Deserializes the ListAccountStorageCredentialsResponse from a dictionary."""
+        return cls(storage_credentials=_repeated_dict(d, 'storage_credentials', StorageCredentialInfo))
+
+
+@dataclass
 class ListCatalogsResponse:
     catalogs: Optional[List[CatalogInfo]] = None
     """An array of catalog information objects."""
+
+    next_page_token: Optional[str] = None
+    """Opaque token to retrieve the next page of results. Absent if there are no more pages.
+    __page_token__ should be set to this value for the next request (for the next page of results)."""
 
     def as_dict(self) -> dict:
         """Serializes the ListCatalogsResponse into a dictionary suitable for use as a JSON request body."""
         body = {}
         if self.catalogs: body['catalogs'] = [v.as_dict() for v in self.catalogs]
+        if self.next_page_token is not None: body['next_page_token'] = self.next_page_token
         return body
 
     @classmethod
     def from_dict(cls, d: Dict[str, any]) -> ListCatalogsResponse:
         """Deserializes the ListCatalogsResponse from a dictionary."""
-        return cls(catalogs=_repeated_dict(d, 'catalogs', CatalogInfo))
+        return cls(catalogs=_repeated_dict(d, 'catalogs', CatalogInfo),
+                   next_page_token=d.get('next_page_token', None))
 
 
 @dataclass
@@ -2547,16 +2608,22 @@ class ListConnectionsResponse:
     connections: Optional[List[ConnectionInfo]] = None
     """An array of connection information objects."""
 
+    next_page_token: Optional[str] = None
+    """Opaque token to retrieve the next page of results. Absent if there are no more pages.
+    __page_token__ should be set to this value for the next request (for the next page of results)."""
+
     def as_dict(self) -> dict:
         """Serializes the ListConnectionsResponse into a dictionary suitable for use as a JSON request body."""
         body = {}
         if self.connections: body['connections'] = [v.as_dict() for v in self.connections]
+        if self.next_page_token is not None: body['next_page_token'] = self.next_page_token
         return body
 
     @classmethod
     def from_dict(cls, d: Dict[str, any]) -> ListConnectionsResponse:
         """Deserializes the ListConnectionsResponse from a dictionary."""
-        return cls(connections=_repeated_dict(d, 'connections', ConnectionInfo))
+        return cls(connections=_repeated_dict(d, 'connections', ConnectionInfo),
+                   next_page_token=d.get('next_page_token', None))
 
 
 @dataclass
@@ -3068,14 +3135,16 @@ class ModelVersionInfoStatus(Enum):
 
 @dataclass
 class MonitorCronSchedule:
+    quartz_cron_expression: str
+    """The expression that determines when to run the monitor. See [examples].
+    
+    [examples]: https://www.quartz-scheduler.org/documentation/quartz-2.3.0/tutorials/crontrigger.html"""
+
+    timezone_id: str
+    """The timezone id (e.g., ``"PST"``) in which to evaluate the quartz expression."""
+
     pause_status: Optional[MonitorCronSchedulePauseStatus] = None
-    """Whether the schedule is paused or not"""
-
-    quartz_cron_expression: Optional[str] = None
-    """A cron expression using quartz syntax that describes the schedule for a job."""
-
-    timezone_id: Optional[str] = None
-    """A Java timezone id. The schedule for a job will be resolved with respect to this timezone."""
+    """Read only field that indicates whether a schedule is paused or not."""
 
     def as_dict(self) -> dict:
         """Serializes the MonitorCronSchedule into a dictionary suitable for use as a JSON request body."""
@@ -3095,60 +3164,10 @@ class MonitorCronSchedule:
 
 
 class MonitorCronSchedulePauseStatus(Enum):
-    """Whether the schedule is paused or not"""
+    """Read only field that indicates whether a schedule is paused or not."""
 
     PAUSED = 'PAUSED'
     UNPAUSED = 'UNPAUSED'
-
-
-@dataclass
-class MonitorCustomMetric:
-    definition: Optional[str] = None
-    """Jinja template for a SQL expression that specifies how to compute the metric. See [create metric
-    definition].
-    
-    [create metric definition]: https://docs.databricks.com/en/lakehouse-monitoring/custom-metrics.html#create-definition"""
-
-    input_columns: Optional[List[str]] = None
-    """Columns on the monitored table to apply the custom metrics to."""
-
-    name: Optional[str] = None
-    """Name of the custom metric."""
-
-    output_data_type: Optional[str] = None
-    """The output type of the custom metric."""
-
-    type: Optional[MonitorCustomMetricType] = None
-    """The type of the custom metric."""
-
-    def as_dict(self) -> dict:
-        """Serializes the MonitorCustomMetric into a dictionary suitable for use as a JSON request body."""
-        body = {}
-        if self.definition is not None: body['definition'] = self.definition
-        if self.input_columns: body['input_columns'] = [v for v in self.input_columns]
-        if self.name is not None: body['name'] = self.name
-        if self.output_data_type is not None: body['output_data_type'] = self.output_data_type
-        if self.type is not None: body['type'] = self.type.value
-        return body
-
-    @classmethod
-    def from_dict(cls, d: Dict[str, any]) -> MonitorCustomMetric:
-        """Deserializes the MonitorCustomMetric from a dictionary."""
-        return cls(definition=d.get('definition', None),
-                   input_columns=d.get('input_columns', None),
-                   name=d.get('name', None),
-                   output_data_type=d.get('output_data_type', None),
-                   type=_enum(d, 'type', MonitorCustomMetricType))
-
-
-class MonitorCustomMetricType(Enum):
-    """The type of the custom metric."""
-
-    CUSTOM_METRIC_TYPE_AGGREGATE = 'CUSTOM_METRIC_TYPE_AGGREGATE'
-    CUSTOM_METRIC_TYPE_DERIVED = 'CUSTOM_METRIC_TYPE_DERIVED'
-    CUSTOM_METRIC_TYPE_DRIFT = 'CUSTOM_METRIC_TYPE_DRIFT'
-    MONITOR_STATUS_ERROR = 'MONITOR_STATUS_ERROR'
-    MONITOR_STATUS_FAILED = 'MONITOR_STATUS_FAILED'
 
 
 @dataclass
@@ -3169,48 +3188,58 @@ class MonitorDataClassificationConfig:
 
 
 @dataclass
-class MonitorDestinations:
+class MonitorDestination:
     email_addresses: Optional[List[str]] = None
     """The list of email addresses to send the notification to. A maximum of 5 email addresses is
     supported."""
 
     def as_dict(self) -> dict:
-        """Serializes the MonitorDestinations into a dictionary suitable for use as a JSON request body."""
+        """Serializes the MonitorDestination into a dictionary suitable for use as a JSON request body."""
         body = {}
         if self.email_addresses: body['email_addresses'] = [v for v in self.email_addresses]
         return body
 
     @classmethod
-    def from_dict(cls, d: Dict[str, any]) -> MonitorDestinations:
-        """Deserializes the MonitorDestinations from a dictionary."""
+    def from_dict(cls, d: Dict[str, any]) -> MonitorDestination:
+        """Deserializes the MonitorDestination from a dictionary."""
         return cls(email_addresses=d.get('email_addresses', None))
 
 
 @dataclass
-class MonitorInferenceLogProfileType:
-    granularities: Optional[List[str]] = None
-    """List of granularities to use when aggregating data into time windows based on their timestamp."""
+class MonitorInferenceLog:
+    timestamp_col: str
+    """Column that contains the timestamps of requests. The column must be one of the following: - A
+    ``TimestampType`` column - A column whose values can be converted to timestamps through the
+    pyspark ``to_timestamp`` [function].
+    
+    [function]: https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/api/pyspark.sql.functions.to_timestamp.html"""
+
+    granularities: List[str]
+    """Granularities for aggregating data into time windows based on their timestamp. Currently the
+    following static granularities are supported: {``"5 minutes"``, ``"30 minutes"``, ``"1 hour"``,
+    ``"1 day"``, ``"<n> week(s)"``, ``"1 month"``, ``"1 year"``}."""
+
+    model_id_col: str
+    """Column that contains the id of the model generating the predictions. Metrics will be computed
+    per model id by default, and also across all model ids."""
+
+    problem_type: MonitorInferenceLogProblemType
+    """Problem type the model aims to solve. Determines the type of model-quality metrics that will be
+    computed."""
+
+    prediction_col: str
+    """Column that contains the output/prediction from the model."""
 
     label_col: Optional[str] = None
-    """Column of the model label."""
-
-    model_id_col: Optional[str] = None
-    """Column of the model id or version."""
-
-    prediction_col: Optional[str] = None
-    """Column of the model prediction."""
+    """Optional column that contains the ground truth for the prediction."""
 
     prediction_proba_col: Optional[str] = None
-    """Column of the model prediction probabilities."""
-
-    problem_type: Optional[MonitorInferenceLogProfileTypeProblemType] = None
-    """Problem type the model aims to solve."""
-
-    timestamp_col: Optional[str] = None
-    """Column of the timestamp of predictions."""
+    """Optional column that contains the prediction probabilities for each class in a classification
+    problem type. The values in this column should be a map, mapping each class label to the
+    prediction probability for a given sample. The map should be of PySpark MapType()."""
 
     def as_dict(self) -> dict:
-        """Serializes the MonitorInferenceLogProfileType into a dictionary suitable for use as a JSON request body."""
+        """Serializes the MonitorInferenceLog into a dictionary suitable for use as a JSON request body."""
         body = {}
         if self.granularities: body['granularities'] = [v for v in self.granularities]
         if self.label_col is not None: body['label_col'] = self.label_col
@@ -3222,19 +3251,20 @@ class MonitorInferenceLogProfileType:
         return body
 
     @classmethod
-    def from_dict(cls, d: Dict[str, any]) -> MonitorInferenceLogProfileType:
-        """Deserializes the MonitorInferenceLogProfileType from a dictionary."""
+    def from_dict(cls, d: Dict[str, any]) -> MonitorInferenceLog:
+        """Deserializes the MonitorInferenceLog from a dictionary."""
         return cls(granularities=d.get('granularities', None),
                    label_col=d.get('label_col', None),
                    model_id_col=d.get('model_id_col', None),
                    prediction_col=d.get('prediction_col', None),
                    prediction_proba_col=d.get('prediction_proba_col', None),
-                   problem_type=_enum(d, 'problem_type', MonitorInferenceLogProfileTypeProblemType),
+                   problem_type=_enum(d, 'problem_type', MonitorInferenceLogProblemType),
                    timestamp_col=d.get('timestamp_col', None))
 
 
-class MonitorInferenceLogProfileTypeProblemType(Enum):
-    """Problem type the model aims to solve."""
+class MonitorInferenceLogProblemType(Enum):
+    """Problem type the model aims to solve. Determines the type of model-quality metrics that will be
+    computed."""
 
     PROBLEM_TYPE_CLASSIFICATION = 'PROBLEM_TYPE_CLASSIFICATION'
     PROBLEM_TYPE_REGRESSION = 'PROBLEM_TYPE_REGRESSION'
@@ -3242,6 +3272,23 @@ class MonitorInferenceLogProfileTypeProblemType(Enum):
 
 @dataclass
 class MonitorInfo:
+    table_name: str
+    """The full name of the table to monitor. Format: __catalog_name__.__schema_name__.__table_name__."""
+
+    status: MonitorInfoStatus
+    """The status of the monitor."""
+
+    monitor_version: str
+    """The version of the monitor config (e.g. 1,2,3). If negative, the monitor may be corrupted."""
+
+    profile_metrics_table_name: str
+    """The full name of the profile metrics table. Format:
+    __catalog_name__.__schema_name__.__table_name__."""
+
+    drift_metrics_table_name: str
+    """The full name of the drift metrics table. Format:
+    __catalog_name__.__schema_name__.__table_name__."""
+
     assets_dir: Optional[str] = None
     """The directory to store monitoring assets (e.g. dashboard, metric tables)."""
 
@@ -3249,39 +3296,29 @@ class MonitorInfo:
     """Name of the baseline table from which drift metrics are computed from. Columns in the monitored
     table should also be present in the baseline table."""
 
-    custom_metrics: Optional[List[MonitorCustomMetric]] = None
+    custom_metrics: Optional[List[MonitorMetric]] = None
     """Custom metrics to compute on the monitored table. These can be aggregate metrics, derived
     metrics (from already computed aggregate metrics), or drift metrics (comparing metrics across
     time windows)."""
 
     dashboard_id: Optional[str] = None
-    """The ID of the generated dashboard."""
+    """Id of dashboard that visualizes the computed metrics. This can be empty if the monitor is in
+    PENDING state."""
 
     data_classification_config: Optional[MonitorDataClassificationConfig] = None
     """The data classification config for the monitor."""
 
-    drift_metrics_table_name: Optional[str] = None
-    """The full name of the drift metrics table. Format:
-    __catalog_name__.__schema_name__.__table_name__."""
-
-    inference_log: Optional[MonitorInferenceLogProfileType] = None
+    inference_log: Optional[MonitorInferenceLog] = None
     """Configuration for monitoring inference logs."""
 
     latest_monitor_failure_msg: Optional[str] = None
     """The latest failure message of the monitor (if any)."""
 
-    monitor_version: Optional[str] = None
-    """The version of the monitor config (e.g. 1,2,3). If negative, the monitor may be corrupted."""
-
-    notifications: Optional[MonitorNotificationsConfig] = None
+    notifications: Optional[MonitorNotifications] = None
     """The notification settings for the monitor."""
 
     output_schema_name: Optional[str] = None
     """Schema where output metric tables are created."""
-
-    profile_metrics_table_name: Optional[str] = None
-    """The full name of the profile metrics table. Format:
-    __catalog_name__.__schema_name__.__table_name__."""
 
     schedule: Optional[MonitorCronSchedule] = None
     """The schedule for automatically updating and refreshing metric tables."""
@@ -3291,16 +3328,10 @@ class MonitorInfo:
     expression independently, resulting in a separate slice for each predicate and its complements.
     For high-cardinality columns, only the top 100 unique values by frequency will generate slices."""
 
-    snapshot: Optional[MonitorSnapshotProfileType] = None
+    snapshot: Optional[MonitorSnapshot] = None
     """Configuration for monitoring snapshot tables."""
 
-    status: Optional[MonitorInfoStatus] = None
-    """The status of the monitor."""
-
-    table_name: Optional[str] = None
-    """The full name of the table to monitor. Format: __catalog_name__.__schema_name__.__table_name__."""
-
-    time_series: Optional[MonitorTimeSeriesProfileType] = None
+    time_series: Optional[MonitorTimeSeries] = None
     """Configuration for monitoring time series tables."""
 
     def as_dict(self) -> dict:
@@ -3335,23 +3366,23 @@ class MonitorInfo:
         """Deserializes the MonitorInfo from a dictionary."""
         return cls(assets_dir=d.get('assets_dir', None),
                    baseline_table_name=d.get('baseline_table_name', None),
-                   custom_metrics=_repeated_dict(d, 'custom_metrics', MonitorCustomMetric),
+                   custom_metrics=_repeated_dict(d, 'custom_metrics', MonitorMetric),
                    dashboard_id=d.get('dashboard_id', None),
                    data_classification_config=_from_dict(d, 'data_classification_config',
                                                          MonitorDataClassificationConfig),
                    drift_metrics_table_name=d.get('drift_metrics_table_name', None),
-                   inference_log=_from_dict(d, 'inference_log', MonitorInferenceLogProfileType),
+                   inference_log=_from_dict(d, 'inference_log', MonitorInferenceLog),
                    latest_monitor_failure_msg=d.get('latest_monitor_failure_msg', None),
                    monitor_version=d.get('monitor_version', None),
-                   notifications=_from_dict(d, 'notifications', MonitorNotificationsConfig),
+                   notifications=_from_dict(d, 'notifications', MonitorNotifications),
                    output_schema_name=d.get('output_schema_name', None),
                    profile_metrics_table_name=d.get('profile_metrics_table_name', None),
                    schedule=_from_dict(d, 'schedule', MonitorCronSchedule),
                    slicing_exprs=d.get('slicing_exprs', None),
-                   snapshot=_from_dict(d, 'snapshot', MonitorSnapshotProfileType),
+                   snapshot=_from_dict(d, 'snapshot', MonitorSnapshot),
                    status=_enum(d, 'status', MonitorInfoStatus),
                    table_name=d.get('table_name', None),
-                   time_series=_from_dict(d, 'time_series', MonitorTimeSeriesProfileType))
+                   time_series=_from_dict(d, 'time_series', MonitorTimeSeries))
 
 
 class MonitorInfoStatus(Enum):
@@ -3365,38 +3396,109 @@ class MonitorInfoStatus(Enum):
 
 
 @dataclass
-class MonitorNotificationsConfig:
-    on_failure: Optional[MonitorDestinations] = None
-    """Who to send notifications to on monitor failure."""
+class MonitorMetric:
+    name: str
+    """Name of the metric in the output tables."""
+
+    definition: str
+    """Jinja template for a SQL expression that specifies how to compute the metric. See [create metric
+    definition].
+    
+    [create metric definition]: https://docs.databricks.com/en/lakehouse-monitoring/custom-metrics.html#create-definition"""
+
+    input_columns: List[str]
+    """A list of column names in the input table the metric should be computed for. Can use
+    ``":table"`` to indicate that the metric needs information from multiple columns."""
+
+    output_data_type: str
+    """The output type of the custom metric."""
+
+    type: MonitorMetricType
+    """Can only be one of ``"CUSTOM_METRIC_TYPE_AGGREGATE"``, ``"CUSTOM_METRIC_TYPE_DERIVED"``, or
+    ``"CUSTOM_METRIC_TYPE_DRIFT"``. The ``"CUSTOM_METRIC_TYPE_AGGREGATE"`` and
+    ``"CUSTOM_METRIC_TYPE_DERIVED"`` metrics are computed on a single table, whereas the
+    ``"CUSTOM_METRIC_TYPE_DRIFT"`` compare metrics across baseline and input table, or across the
+    two consecutive time windows. - CUSTOM_METRIC_TYPE_AGGREGATE: only depend on the existing
+    columns in your table - CUSTOM_METRIC_TYPE_DERIVED: depend on previously computed aggregate
+    metrics - CUSTOM_METRIC_TYPE_DRIFT: depend on previously computed aggregate or derived metrics"""
 
     def as_dict(self) -> dict:
-        """Serializes the MonitorNotificationsConfig into a dictionary suitable for use as a JSON request body."""
+        """Serializes the MonitorMetric into a dictionary suitable for use as a JSON request body."""
         body = {}
-        if self.on_failure: body['on_failure'] = self.on_failure.as_dict()
+        if self.definition is not None: body['definition'] = self.definition
+        if self.input_columns: body['input_columns'] = [v for v in self.input_columns]
+        if self.name is not None: body['name'] = self.name
+        if self.output_data_type is not None: body['output_data_type'] = self.output_data_type
+        if self.type is not None: body['type'] = self.type.value
         return body
 
     @classmethod
-    def from_dict(cls, d: Dict[str, any]) -> MonitorNotificationsConfig:
-        """Deserializes the MonitorNotificationsConfig from a dictionary."""
-        return cls(on_failure=_from_dict(d, 'on_failure', MonitorDestinations))
+    def from_dict(cls, d: Dict[str, any]) -> MonitorMetric:
+        """Deserializes the MonitorMetric from a dictionary."""
+        return cls(definition=d.get('definition', None),
+                   input_columns=d.get('input_columns', None),
+                   name=d.get('name', None),
+                   output_data_type=d.get('output_data_type', None),
+                   type=_enum(d, 'type', MonitorMetricType))
+
+
+class MonitorMetricType(Enum):
+    """Can only be one of ``"CUSTOM_METRIC_TYPE_AGGREGATE"``, ``"CUSTOM_METRIC_TYPE_DERIVED"``, or
+    ``"CUSTOM_METRIC_TYPE_DRIFT"``. The ``"CUSTOM_METRIC_TYPE_AGGREGATE"`` and
+    ``"CUSTOM_METRIC_TYPE_DERIVED"`` metrics are computed on a single table, whereas the
+    ``"CUSTOM_METRIC_TYPE_DRIFT"`` compare metrics across baseline and input table, or across the
+    two consecutive time windows. - CUSTOM_METRIC_TYPE_AGGREGATE: only depend on the existing
+    columns in your table - CUSTOM_METRIC_TYPE_DERIVED: depend on previously computed aggregate
+    metrics - CUSTOM_METRIC_TYPE_DRIFT: depend on previously computed aggregate or derived metrics"""
+
+    CUSTOM_METRIC_TYPE_AGGREGATE = 'CUSTOM_METRIC_TYPE_AGGREGATE'
+    CUSTOM_METRIC_TYPE_DERIVED = 'CUSTOM_METRIC_TYPE_DERIVED'
+    CUSTOM_METRIC_TYPE_DRIFT = 'CUSTOM_METRIC_TYPE_DRIFT'
+
+
+@dataclass
+class MonitorNotifications:
+    on_failure: Optional[MonitorDestination] = None
+    """Who to send notifications to on monitor failure."""
+
+    on_new_classification_tag_detected: Optional[MonitorDestination] = None
+    """Who to send notifications to when new data classification tags are detected."""
+
+    def as_dict(self) -> dict:
+        """Serializes the MonitorNotifications into a dictionary suitable for use as a JSON request body."""
+        body = {}
+        if self.on_failure: body['on_failure'] = self.on_failure.as_dict()
+        if self.on_new_classification_tag_detected:
+            body['on_new_classification_tag_detected'] = self.on_new_classification_tag_detected.as_dict()
+        return body
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, any]) -> MonitorNotifications:
+        """Deserializes the MonitorNotifications from a dictionary."""
+        return cls(on_failure=_from_dict(d, 'on_failure', MonitorDestination),
+                   on_new_classification_tag_detected=_from_dict(d, 'on_new_classification_tag_detected',
+                                                                 MonitorDestination))
 
 
 @dataclass
 class MonitorRefreshInfo:
+    refresh_id: int
+    """Unique id of the refresh operation."""
+
+    state: MonitorRefreshInfoState
+    """The current state of the refresh."""
+
+    start_time_ms: int
+    """Time at which refresh operation was initiated (milliseconds since 1/1/1970 UTC)."""
+
     end_time_ms: Optional[int] = None
-    """The time at which the refresh ended, in epoch milliseconds."""
+    """Time at which refresh operation completed (milliseconds since 1/1/1970 UTC)."""
 
     message: Optional[str] = None
     """An optional message to give insight into the current state of the job (e.g. FAILURE messages)."""
 
-    refresh_id: Optional[int] = None
-    """The ID of the refresh."""
-
-    start_time_ms: Optional[int] = None
-    """The time at which the refresh started, in epoch milliseconds."""
-
-    state: Optional[MonitorRefreshInfoState] = None
-    """The current state of the refresh."""
+    trigger: Optional[MonitorRefreshInfoTrigger] = None
+    """The method by which the refresh was triggered."""
 
     def as_dict(self) -> dict:
         """Serializes the MonitorRefreshInfo into a dictionary suitable for use as a JSON request body."""
@@ -3406,6 +3508,7 @@ class MonitorRefreshInfo:
         if self.refresh_id is not None: body['refresh_id'] = self.refresh_id
         if self.start_time_ms is not None: body['start_time_ms'] = self.start_time_ms
         if self.state is not None: body['state'] = self.state.value
+        if self.trigger is not None: body['trigger'] = self.trigger.value
         return body
 
     @classmethod
@@ -3415,7 +3518,8 @@ class MonitorRefreshInfo:
                    message=d.get('message', None),
                    refresh_id=d.get('refresh_id', None),
                    start_time_ms=d.get('start_time_ms', None),
-                   state=_enum(d, 'state', MonitorRefreshInfoState))
+                   state=_enum(d, 'state', MonitorRefreshInfoState),
+                   trigger=_enum(d, 'trigger', MonitorRefreshInfoTrigger))
 
 
 class MonitorRefreshInfoState(Enum):
@@ -3428,39 +3532,68 @@ class MonitorRefreshInfoState(Enum):
     SUCCESS = 'SUCCESS'
 
 
+class MonitorRefreshInfoTrigger(Enum):
+    """The method by which the refresh was triggered."""
+
+    MANUAL = 'MANUAL'
+    SCHEDULE = 'SCHEDULE'
+
+
 @dataclass
-class MonitorSnapshotProfileType:
+class MonitorRefreshListResponse:
+    refreshes: Optional[List[MonitorRefreshInfo]] = None
+    """List of refreshes."""
 
     def as_dict(self) -> dict:
-        """Serializes the MonitorSnapshotProfileType into a dictionary suitable for use as a JSON request body."""
+        """Serializes the MonitorRefreshListResponse into a dictionary suitable for use as a JSON request body."""
+        body = {}
+        if self.refreshes: body['refreshes'] = [v.as_dict() for v in self.refreshes]
+        return body
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, any]) -> MonitorRefreshListResponse:
+        """Deserializes the MonitorRefreshListResponse from a dictionary."""
+        return cls(refreshes=_repeated_dict(d, 'refreshes', MonitorRefreshInfo))
+
+
+@dataclass
+class MonitorSnapshot:
+
+    def as_dict(self) -> dict:
+        """Serializes the MonitorSnapshot into a dictionary suitable for use as a JSON request body."""
         body = {}
         return body
 
     @classmethod
-    def from_dict(cls, d: Dict[str, any]) -> MonitorSnapshotProfileType:
-        """Deserializes the MonitorSnapshotProfileType from a dictionary."""
+    def from_dict(cls, d: Dict[str, any]) -> MonitorSnapshot:
+        """Deserializes the MonitorSnapshot from a dictionary."""
         return cls()
 
 
 @dataclass
-class MonitorTimeSeriesProfileType:
-    granularities: Optional[List[str]] = None
-    """List of granularities to use when aggregating data into time windows based on their timestamp."""
+class MonitorTimeSeries:
+    timestamp_col: str
+    """Column that contains the timestamps of requests. The column must be one of the following: - A
+    ``TimestampType`` column - A column whose values can be converted to timestamps through the
+    pyspark ``to_timestamp`` [function].
+    
+    [function]: https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/api/pyspark.sql.functions.to_timestamp.html"""
 
-    timestamp_col: Optional[str] = None
-    """The timestamp column. This must be timestamp types or convertible to timestamp types using the
-    pyspark to_timestamp function."""
+    granularities: List[str]
+    """Granularities for aggregating data into time windows based on their timestamp. Currently the
+    following static granularities are supported: {``"5 minutes"``, ``"30 minutes"``, ``"1 hour"``,
+    ``"1 day"``, ``"<n> week(s)"``, ``"1 month"``, ``"1 year"``}."""
 
     def as_dict(self) -> dict:
-        """Serializes the MonitorTimeSeriesProfileType into a dictionary suitable for use as a JSON request body."""
+        """Serializes the MonitorTimeSeries into a dictionary suitable for use as a JSON request body."""
         body = {}
         if self.granularities: body['granularities'] = [v for v in self.granularities]
         if self.timestamp_col is not None: body['timestamp_col'] = self.timestamp_col
         return body
 
     @classmethod
-    def from_dict(cls, d: Dict[str, any]) -> MonitorTimeSeriesProfileType:
-        """Deserializes the MonitorTimeSeriesProfileType from a dictionary."""
+    def from_dict(cls, d: Dict[str, any]) -> MonitorTimeSeries:
+        """Deserializes the MonitorTimeSeries from a dictionary."""
         return cls(granularities=d.get('granularities', None), timestamp_col=d.get('timestamp_col', None))
 
 
@@ -3494,12 +3627,16 @@ class OnlineTable:
     status: Optional[OnlineTableStatus] = None
     """Online Table status"""
 
+    table_serving_url: Optional[str] = None
+    """Data serving REST API URL for this table"""
+
     def as_dict(self) -> dict:
         """Serializes the OnlineTable into a dictionary suitable for use as a JSON request body."""
         body = {}
         if self.name is not None: body['name'] = self.name
         if self.spec: body['spec'] = self.spec.as_dict()
         if self.status: body['status'] = self.status.as_dict()
+        if self.table_serving_url is not None: body['table_serving_url'] = self.table_serving_url
         return body
 
     @classmethod
@@ -3507,7 +3644,8 @@ class OnlineTable:
         """Deserializes the OnlineTable from a dictionary."""
         return cls(name=d.get('name', None),
                    spec=_from_dict(d, 'spec', OnlineTableSpec),
-                   status=_from_dict(d, 'status', OnlineTableStatus))
+                   status=_from_dict(d, 'status', OnlineTableStatus),
+                   table_serving_url=d.get('table_serving_url', None))
 
 
 @dataclass
@@ -3773,6 +3911,7 @@ class PrimaryKeyConstraint:
 
 class Privilege(Enum):
 
+    ACCESS = 'ACCESS'
     ALL_PRIVILEGES = 'ALL_PRIVILEGES'
     APPLY_TAG = 'APPLY_TAG'
     CREATE = 'CREATE'
@@ -3789,6 +3928,7 @@ class Privilege(Enum):
     CREATE_PROVIDER = 'CREATE_PROVIDER'
     CREATE_RECIPIENT = 'CREATE_RECIPIENT'
     CREATE_SCHEMA = 'CREATE_SCHEMA'
+    CREATE_SERVICE_CREDENTIAL = 'CREATE_SERVICE_CREDENTIAL'
     CREATE_SHARE = 'CREATE_SHARE'
     CREATE_STORAGE_CREDENTIAL = 'CREATE_STORAGE_CREDENTIAL'
     CREATE_TABLE = 'CREATE_TABLE'
@@ -4037,6 +4177,9 @@ class SchemaInfo:
     properties: Optional[Dict[str, str]] = None
     """A map of key-value properties attached to the securable."""
 
+    schema_id: Optional[str] = None
+    """The unique identifier of the schema."""
+
     storage_location: Optional[str] = None
     """Storage location for managed tables within schema."""
 
@@ -4069,6 +4212,7 @@ class SchemaInfo:
         if self.name is not None: body['name'] = self.name
         if self.owner is not None: body['owner'] = self.owner
         if self.properties: body['properties'] = self.properties
+        if self.schema_id is not None: body['schema_id'] = self.schema_id
         if self.storage_location is not None: body['storage_location'] = self.storage_location
         if self.storage_root is not None: body['storage_root'] = self.storage_root
         if self.updated_at is not None: body['updated_at'] = self.updated_at
@@ -4093,6 +4237,7 @@ class SchemaInfo:
                    name=d.get('name', None),
                    owner=d.get('owner', None),
                    properties=d.get('properties', None),
+                   schema_id=d.get('schema_id', None),
                    storage_location=d.get('storage_location', None),
                    storage_root=d.get('storage_root', None),
                    updated_at=d.get('updated_at', None),
@@ -4207,7 +4352,7 @@ class StorageCredentialInfo:
     aws_iam_role: Optional[AwsIamRoleResponse] = None
     """The AWS IAM role configuration."""
 
-    azure_managed_identity: Optional[AzureManagedIdentity] = None
+    azure_managed_identity: Optional[AzureManagedIdentityResponse] = None
     """The Azure managed identity configuration."""
 
     azure_service_principal: Optional[AzureServicePrincipal] = None
@@ -4226,10 +4371,13 @@ class StorageCredentialInfo:
     """Username of credential creator."""
 
     databricks_gcp_service_account: Optional[DatabricksGcpServiceAccountResponse] = None
-    """The <Databricks> managed GCP service account configuration."""
+    """The Databricks managed GCP service account configuration."""
 
     id: Optional[str] = None
     """The unique identifier of the credential."""
+
+    isolation_mode: Optional[IsolationMode] = None
+    """Whether the current securable is accessible from all workspaces or a specific set of workspaces."""
 
     metastore_id: Optional[str] = None
     """Unique identifier of parent metastore."""
@@ -4266,6 +4414,7 @@ class StorageCredentialInfo:
         if self.databricks_gcp_service_account:
             body['databricks_gcp_service_account'] = self.databricks_gcp_service_account.as_dict()
         if self.id is not None: body['id'] = self.id
+        if self.isolation_mode is not None: body['isolation_mode'] = self.isolation_mode.value
         if self.metastore_id is not None: body['metastore_id'] = self.metastore_id
         if self.name is not None: body['name'] = self.name
         if self.owner is not None: body['owner'] = self.owner
@@ -4280,7 +4429,8 @@ class StorageCredentialInfo:
     def from_dict(cls, d: Dict[str, any]) -> StorageCredentialInfo:
         """Deserializes the StorageCredentialInfo from a dictionary."""
         return cls(aws_iam_role=_from_dict(d, 'aws_iam_role', AwsIamRoleResponse),
-                   azure_managed_identity=_from_dict(d, 'azure_managed_identity', AzureManagedIdentity),
+                   azure_managed_identity=_from_dict(d, 'azure_managed_identity',
+                                                     AzureManagedIdentityResponse),
                    azure_service_principal=_from_dict(d, 'azure_service_principal', AzureServicePrincipal),
                    cloudflare_api_token=_from_dict(d, 'cloudflare_api_token', CloudflareApiToken),
                    comment=d.get('comment', None),
@@ -4289,6 +4439,7 @@ class StorageCredentialInfo:
                    databricks_gcp_service_account=_from_dict(d, 'databricks_gcp_service_account',
                                                              DatabricksGcpServiceAccountResponse),
                    id=d.get('id', None),
+                   isolation_mode=_enum(d, 'isolation_mode', IsolationMode),
                    metastore_id=d.get('metastore_id', None),
                    name=d.get('name', None),
                    owner=d.get('owner', None),
@@ -4477,7 +4628,7 @@ class TableInfo:
     """List of table constraints. Note: this field is not set in the output of the __listTables__ API."""
 
     table_id: Optional[str] = None
-    """Name of table, relative to parent schema."""
+    """The unique identifier of the table."""
 
     table_type: Optional[TableType] = None
 
@@ -4583,7 +4734,7 @@ class TableInfo:
 
 @dataclass
 class TableRowFilter:
-    name: str
+    function_name: str
     """The full name of the row filter SQL UDF."""
 
     input_column_names: List[str]
@@ -4593,14 +4744,15 @@ class TableRowFilter:
     def as_dict(self) -> dict:
         """Serializes the TableRowFilter into a dictionary suitable for use as a JSON request body."""
         body = {}
+        if self.function_name is not None: body['function_name'] = self.function_name
         if self.input_column_names: body['input_column_names'] = [v for v in self.input_column_names]
-        if self.name is not None: body['name'] = self.name
         return body
 
     @classmethod
     def from_dict(cls, d: Dict[str, any]) -> TableRowFilter:
         """Deserializes the TableRowFilter from a dictionary."""
-        return cls(input_column_names=d.get('input_column_names', None), name=d.get('name', None))
+        return cls(function_name=d.get('function_name', None),
+                   input_column_names=d.get('input_column_names', None))
 
 
 @dataclass
@@ -4626,7 +4778,10 @@ class TableSummary:
 class TableType(Enum):
 
     EXTERNAL = 'EXTERNAL'
+    EXTERNAL_SHALLOW_CLONE = 'EXTERNAL_SHALLOW_CLONE'
+    FOREIGN = 'FOREIGN'
     MANAGED = 'MANAGED'
+    MANAGED_SHALLOW_CLONE = 'MANAGED_SHALLOW_CLONE'
     MATERIALIZED_VIEW = 'MATERIALIZED_VIEW'
     STREAMING_TABLE = 'STREAMING_TABLE'
     VIEW = 'VIEW'
@@ -4702,7 +4857,7 @@ class UpdateCatalog:
     enable_predictive_optimization: Optional[EnablePredictiveOptimization] = None
     """Whether predictive optimization should be enabled for this object and objects under it."""
 
-    isolation_mode: Optional[IsolationMode] = None
+    isolation_mode: Optional[CatalogIsolationMode] = None
     """Whether the current securable is accessible from all workspaces or a specific set of workspaces."""
 
     name: Optional[str] = None
@@ -4736,7 +4891,7 @@ class UpdateCatalog:
         return cls(comment=d.get('comment', None),
                    enable_predictive_optimization=_enum(d, 'enable_predictive_optimization',
                                                         EnablePredictiveOptimization),
-                   isolation_mode=_enum(d, 'isolation_mode', IsolationMode),
+                   isolation_mode=_enum(d, 'isolation_mode', CatalogIsolationMode),
                    name=d.get('name', None),
                    new_name=d.get('new_name', None),
                    owner=d.get('owner', None),
@@ -4792,6 +4947,9 @@ class UpdateExternalLocation:
     force: Optional[bool] = None
     """Force update even if changing url invalidates dependent external tables or mounts."""
 
+    isolation_mode: Optional[IsolationMode] = None
+    """Whether the current securable is accessible from all workspaces or a specific set of workspaces."""
+
     name: Optional[str] = None
     """Name of the external location."""
 
@@ -4818,6 +4976,7 @@ class UpdateExternalLocation:
         if self.credential_name is not None: body['credential_name'] = self.credential_name
         if self.encryption_details: body['encryption_details'] = self.encryption_details.as_dict()
         if self.force is not None: body['force'] = self.force
+        if self.isolation_mode is not None: body['isolation_mode'] = self.isolation_mode.value
         if self.name is not None: body['name'] = self.name
         if self.new_name is not None: body['new_name'] = self.new_name
         if self.owner is not None: body['owner'] = self.owner
@@ -4834,6 +4993,7 @@ class UpdateExternalLocation:
                    credential_name=d.get('credential_name', None),
                    encryption_details=_from_dict(d, 'encryption_details', EncryptionDetails),
                    force=d.get('force', None),
+                   isolation_mode=_enum(d, 'isolation_mode', IsolationMode),
                    name=d.get('name', None),
                    new_name=d.get('new_name', None),
                    owner=d.get('owner', None),
@@ -4993,21 +5153,22 @@ class UpdateMonitor:
     """Name of the baseline table from which drift metrics are computed from. Columns in the monitored
     table should also be present in the baseline table."""
 
-    custom_metrics: Optional[List[MonitorCustomMetric]] = None
+    custom_metrics: Optional[List[MonitorMetric]] = None
     """Custom metrics to compute on the monitored table. These can be aggregate metrics, derived
     metrics (from already computed aggregate metrics), or drift metrics (comparing metrics across
     time windows)."""
 
+    dashboard_id: Optional[str] = None
+    """Id of dashboard that visualizes the computed metrics. This can be empty if the monitor is in
+    PENDING state."""
+
     data_classification_config: Optional[MonitorDataClassificationConfig] = None
     """The data classification config for the monitor."""
 
-    full_name: Optional[str] = None
-    """Full name of the table."""
-
-    inference_log: Optional[MonitorInferenceLogProfileType] = None
+    inference_log: Optional[MonitorInferenceLog] = None
     """Configuration for monitoring inference logs."""
 
-    notifications: Optional[MonitorNotificationsConfig] = None
+    notifications: Optional[MonitorNotifications] = None
     """The notification settings for the monitor."""
 
     schedule: Optional[MonitorCronSchedule] = None
@@ -5018,10 +5179,13 @@ class UpdateMonitor:
     expression independently, resulting in a separate slice for each predicate and its complements.
     For high-cardinality columns, only the top 100 unique values by frequency will generate slices."""
 
-    snapshot: Optional[MonitorSnapshotProfileType] = None
+    snapshot: Optional[MonitorSnapshot] = None
     """Configuration for monitoring snapshot tables."""
 
-    time_series: Optional[MonitorTimeSeriesProfileType] = None
+    table_name: Optional[str] = None
+    """Full name of the table."""
+
+    time_series: Optional[MonitorTimeSeries] = None
     """Configuration for monitoring time series tables."""
 
     def as_dict(self) -> dict:
@@ -5029,15 +5193,16 @@ class UpdateMonitor:
         body = {}
         if self.baseline_table_name is not None: body['baseline_table_name'] = self.baseline_table_name
         if self.custom_metrics: body['custom_metrics'] = [v.as_dict() for v in self.custom_metrics]
+        if self.dashboard_id is not None: body['dashboard_id'] = self.dashboard_id
         if self.data_classification_config:
             body['data_classification_config'] = self.data_classification_config.as_dict()
-        if self.full_name is not None: body['full_name'] = self.full_name
         if self.inference_log: body['inference_log'] = self.inference_log.as_dict()
         if self.notifications: body['notifications'] = self.notifications.as_dict()
         if self.output_schema_name is not None: body['output_schema_name'] = self.output_schema_name
         if self.schedule: body['schedule'] = self.schedule.as_dict()
         if self.slicing_exprs: body['slicing_exprs'] = [v for v in self.slicing_exprs]
         if self.snapshot: body['snapshot'] = self.snapshot.as_dict()
+        if self.table_name is not None: body['table_name'] = self.table_name
         if self.time_series: body['time_series'] = self.time_series.as_dict()
         return body
 
@@ -5045,17 +5210,18 @@ class UpdateMonitor:
     def from_dict(cls, d: Dict[str, any]) -> UpdateMonitor:
         """Deserializes the UpdateMonitor from a dictionary."""
         return cls(baseline_table_name=d.get('baseline_table_name', None),
-                   custom_metrics=_repeated_dict(d, 'custom_metrics', MonitorCustomMetric),
+                   custom_metrics=_repeated_dict(d, 'custom_metrics', MonitorMetric),
+                   dashboard_id=d.get('dashboard_id', None),
                    data_classification_config=_from_dict(d, 'data_classification_config',
                                                          MonitorDataClassificationConfig),
-                   full_name=d.get('full_name', None),
-                   inference_log=_from_dict(d, 'inference_log', MonitorInferenceLogProfileType),
-                   notifications=_from_dict(d, 'notifications', MonitorNotificationsConfig),
+                   inference_log=_from_dict(d, 'inference_log', MonitorInferenceLog),
+                   notifications=_from_dict(d, 'notifications', MonitorNotifications),
                    output_schema_name=d.get('output_schema_name', None),
                    schedule=_from_dict(d, 'schedule', MonitorCronSchedule),
                    slicing_exprs=d.get('slicing_exprs', None),
-                   snapshot=_from_dict(d, 'snapshot', MonitorSnapshotProfileType),
-                   time_series=_from_dict(d, 'time_series', MonitorTimeSeriesProfileType))
+                   snapshot=_from_dict(d, 'snapshot', MonitorSnapshot),
+                   table_name=d.get('table_name', None),
+                   time_series=_from_dict(d, 'time_series', MonitorTimeSeries))
 
 
 @dataclass
@@ -5180,7 +5346,7 @@ class UpdateStorageCredential:
     aws_iam_role: Optional[AwsIamRoleRequest] = None
     """The AWS IAM role configuration."""
 
-    azure_managed_identity: Optional[AzureManagedIdentity] = None
+    azure_managed_identity: Optional[AzureManagedIdentityResponse] = None
     """The Azure managed identity configuration."""
 
     azure_service_principal: Optional[AzureServicePrincipal] = None
@@ -5193,10 +5359,13 @@ class UpdateStorageCredential:
     """Comment associated with the credential."""
 
     databricks_gcp_service_account: Optional[DatabricksGcpServiceAccountRequest] = None
-    """The <Databricks> managed GCP service account configuration."""
+    """The Databricks managed GCP service account configuration."""
 
     force: Optional[bool] = None
     """Force update even if there are dependent external locations or external tables."""
+
+    isolation_mode: Optional[IsolationMode] = None
+    """Whether the current securable is accessible from all workspaces or a specific set of workspaces."""
 
     name: Optional[str] = None
     """Name of the storage credential."""
@@ -5225,6 +5394,7 @@ class UpdateStorageCredential:
         if self.databricks_gcp_service_account:
             body['databricks_gcp_service_account'] = self.databricks_gcp_service_account.as_dict()
         if self.force is not None: body['force'] = self.force
+        if self.isolation_mode is not None: body['isolation_mode'] = self.isolation_mode.value
         if self.name is not None: body['name'] = self.name
         if self.new_name is not None: body['new_name'] = self.new_name
         if self.owner is not None: body['owner'] = self.owner
@@ -5236,13 +5406,15 @@ class UpdateStorageCredential:
     def from_dict(cls, d: Dict[str, any]) -> UpdateStorageCredential:
         """Deserializes the UpdateStorageCredential from a dictionary."""
         return cls(aws_iam_role=_from_dict(d, 'aws_iam_role', AwsIamRoleRequest),
-                   azure_managed_identity=_from_dict(d, 'azure_managed_identity', AzureManagedIdentity),
+                   azure_managed_identity=_from_dict(d, 'azure_managed_identity',
+                                                     AzureManagedIdentityResponse),
                    azure_service_principal=_from_dict(d, 'azure_service_principal', AzureServicePrincipal),
                    cloudflare_api_token=_from_dict(d, 'cloudflare_api_token', CloudflareApiToken),
                    comment=d.get('comment', None),
                    databricks_gcp_service_account=_from_dict(d, 'databricks_gcp_service_account',
                                                              DatabricksGcpServiceAccountRequest),
                    force=d.get('force', None),
+                   isolation_mode=_enum(d, 'isolation_mode', IsolationMode),
                    name=d.get('name', None),
                    new_name=d.get('new_name', None),
                    owner=d.get('owner', None),
@@ -5346,7 +5518,7 @@ class ValidateStorageCredential:
     aws_iam_role: Optional[AwsIamRoleRequest] = None
     """The AWS IAM role configuration."""
 
-    azure_managed_identity: Optional[AzureManagedIdentity] = None
+    azure_managed_identity: Optional[AzureManagedIdentityRequest] = None
     """The Azure managed identity configuration."""
 
     azure_service_principal: Optional[AzureServicePrincipal] = None
@@ -5392,7 +5564,8 @@ class ValidateStorageCredential:
     def from_dict(cls, d: Dict[str, any]) -> ValidateStorageCredential:
         """Deserializes the ValidateStorageCredential from a dictionary."""
         return cls(aws_iam_role=_from_dict(d, 'aws_iam_role', AwsIamRoleRequest),
-                   azure_managed_identity=_from_dict(d, 'azure_managed_identity', AzureManagedIdentity),
+                   azure_managed_identity=_from_dict(d, 'azure_managed_identity',
+                                                     AzureManagedIdentityRequest),
                    azure_service_principal=_from_dict(d, 'azure_service_principal', AzureServicePrincipal),
                    cloudflare_api_token=_from_dict(d, 'cloudflare_api_token', CloudflareApiToken),
                    databricks_gcp_service_account=_from_dict(d, 'databricks_gcp_service_account',
@@ -5456,6 +5629,7 @@ class ValidationResultOperation(Enum):
 
     DELETE = 'DELETE'
     LIST = 'LIST'
+    PATH_EXISTS = 'PATH_EXISTS'
     READ = 'READ'
     WRITE = 'WRITE'
 
@@ -5938,11 +6112,12 @@ class AccountStorageCredentialsAPI:
 
         headers = {'Accept': 'application/json', }
 
-        res = self._api.do(
+        json = self._api.do(
             'GET',
             f'/api/2.0/accounts/{self._api.account_id}/metastores/{metastore_id}/storage-credentials',
             headers=headers)
-        return [StorageCredentialInfo.from_dict(v) for v in res]
+        parsed = ListAccountStorageCredentialsResponse.from_dict(json).storage_credentials
+        return parsed if parsed is not None else []
 
     def update(self,
                metastore_id: str,
@@ -6129,7 +6304,11 @@ class CatalogsAPI:
         res = self._api.do('GET', f'/api/2.1/unity-catalog/catalogs/{name}', query=query, headers=headers)
         return CatalogInfo.from_dict(res)
 
-    def list(self, *, include_browse: Optional[bool] = None) -> Iterator[CatalogInfo]:
+    def list(self,
+             *,
+             include_browse: Optional[bool] = None,
+             max_results: Optional[int] = None,
+             page_token: Optional[str] = None) -> Iterator[CatalogInfo]:
         """List catalogs.
         
         Gets an array of catalogs in the metastore. If the caller is the metastore admin, all catalogs will be
@@ -6140,24 +6319,41 @@ class CatalogsAPI:
         :param include_browse: bool (optional)
           Whether to include catalogs in the response for which the principal can only access selective
           metadata for
+        :param max_results: int (optional)
+          Maximum number of catalogs to return. - when set to 0, the page length is set to a server configured
+          value (recommended); - when set to a value greater than 0, the page length is the minimum of this
+          value and a server configured value; - when set to a value less than 0, an invalid parameter error
+          is returned; - If not set, all valid catalogs are returned (not recommended). - Note: The number of
+          returned catalogs might be less than the specified max_results size, even zero. The only definitive
+          indication that no further catalogs can be fetched is when the next_page_token is unset from the
+          response.
+        :param page_token: str (optional)
+          Opaque pagination token to go to next page based on previous query.
         
         :returns: Iterator over :class:`CatalogInfo`
         """
 
         query = {}
         if include_browse is not None: query['include_browse'] = include_browse
+        if max_results is not None: query['max_results'] = max_results
+        if page_token is not None: query['page_token'] = page_token
         headers = {'Accept': 'application/json', }
 
-        json = self._api.do('GET', '/api/2.1/unity-catalog/catalogs', query=query, headers=headers)
-        parsed = ListCatalogsResponse.from_dict(json).catalogs
-        return parsed if parsed is not None else []
+        while True:
+            json = self._api.do('GET', '/api/2.1/unity-catalog/catalogs', query=query, headers=headers)
+            if 'catalogs' in json:
+                for v in json['catalogs']:
+                    yield CatalogInfo.from_dict(v)
+            if 'next_page_token' not in json or not json['next_page_token']:
+                return
+            query['page_token'] = json['next_page_token']
 
     def update(self,
                name: str,
                *,
                comment: Optional[str] = None,
                enable_predictive_optimization: Optional[EnablePredictiveOptimization] = None,
-               isolation_mode: Optional[IsolationMode] = None,
+               isolation_mode: Optional[CatalogIsolationMode] = None,
                new_name: Optional[str] = None,
                owner: Optional[str] = None,
                properties: Optional[Dict[str, str]] = None) -> CatalogInfo:
@@ -6172,7 +6368,7 @@ class CatalogsAPI:
           User-provided free-form text description.
         :param enable_predictive_optimization: :class:`EnablePredictiveOptimization` (optional)
           Whether predictive optimization should be enabled for this object and objects under it.
-        :param isolation_mode: :class:`IsolationMode` (optional)
+        :param isolation_mode: :class:`CatalogIsolationMode` (optional)
           Whether the current securable is accessible from all workspaces or a specific set of workspaces.
         :param new_name: str (optional)
           New name for the catalog.
@@ -6283,19 +6479,38 @@ class ConnectionsAPI:
         res = self._api.do('GET', f'/api/2.1/unity-catalog/connections/{name}', headers=headers)
         return ConnectionInfo.from_dict(res)
 
-    def list(self) -> Iterator[ConnectionInfo]:
+    def list(self,
+             *,
+             max_results: Optional[int] = None,
+             page_token: Optional[str] = None) -> Iterator[ConnectionInfo]:
         """List connections.
         
         List all connections.
         
+        :param max_results: int (optional)
+          Maximum number of connections to return. - If not set, all connections are returned (not
+          recommended). - when set to a value greater than 0, the page length is the minimum of this value and
+          a server configured value; - when set to 0, the page length is set to a server configured value
+          (recommended); - when set to a value less than 0, an invalid parameter error is returned;
+        :param page_token: str (optional)
+          Opaque pagination token to go to next page based on previous query.
+        
         :returns: Iterator over :class:`ConnectionInfo`
         """
 
+        query = {}
+        if max_results is not None: query['max_results'] = max_results
+        if page_token is not None: query['page_token'] = page_token
         headers = {'Accept': 'application/json', }
 
-        json = self._api.do('GET', '/api/2.1/unity-catalog/connections', headers=headers)
-        parsed = ListConnectionsResponse.from_dict(json).connections
-        return parsed if parsed is not None else []
+        while True:
+            json = self._api.do('GET', '/api/2.1/unity-catalog/connections', query=query, headers=headers)
+            if 'connections' in json:
+                for v in json['connections']:
+                    yield ConnectionInfo.from_dict(v)
+            if 'next_page_token' not in json or not json['next_page_token']:
+                return
+            query['page_token'] = json['next_page_token']
 
     def update(self,
                name: str,
@@ -6491,6 +6706,7 @@ class ExternalLocationsAPI:
                credential_name: Optional[str] = None,
                encryption_details: Optional[EncryptionDetails] = None,
                force: Optional[bool] = None,
+               isolation_mode: Optional[IsolationMode] = None,
                new_name: Optional[str] = None,
                owner: Optional[str] = None,
                read_only: Optional[bool] = None,
@@ -6514,6 +6730,8 @@ class ExternalLocationsAPI:
           Encryption options that apply to clients connecting to cloud storage.
         :param force: bool (optional)
           Force update even if changing url invalidates dependent external tables or mounts.
+        :param isolation_mode: :class:`IsolationMode` (optional)
+          Whether the current securable is accessible from all workspaces or a specific set of workspaces.
         :param new_name: str (optional)
           New name for the external location.
         :param owner: str (optional)
@@ -6533,6 +6751,7 @@ class ExternalLocationsAPI:
         if credential_name is not None: body['credential_name'] = credential_name
         if encryption_details is not None: body['encryption_details'] = encryption_details.as_dict()
         if force is not None: body['force'] = force
+        if isolation_mode is not None: body['isolation_mode'] = isolation_mode.value
         if new_name is not None: body['new_name'] = new_name
         if owner is not None: body['owner'] = owner
         if read_only is not None: body['read_only'] = read_only
@@ -6559,6 +6778,8 @@ class FunctionsAPI:
 
     def create(self, function_info: CreateFunction) -> FunctionInfo:
         """Create a function.
+        
+        **WARNING: This API is experimental and will change in future versions**
         
         Creates a new function
         
@@ -6807,335 +7028,6 @@ class GrantsAPI:
         return PermissionsList.from_dict(res)
 
 
-class LakehouseMonitorsAPI:
-    """A monitor computes and monitors data or model quality metrics for a table over time. It generates metrics
-    tables and a dashboard that you can use to monitor table health and set alerts.
-    
-    Most write operations require the user to be the owner of the table (or its parent schema or parent
-    catalog). Viewing the dashboard, computed metrics, or monitor configuration only requires the user to have
-    **SELECT** privileges on the table (along with **USE_SCHEMA** and **USE_CATALOG**)."""
-
-    def __init__(self, api_client):
-        self._api = api_client
-
-    def cancel_refresh(self, full_name: str, refresh_id: str):
-        """Cancel refresh.
-        
-        Cancel an active monitor refresh for the given refresh ID.
-        
-        The caller must either: 1. be an owner of the table's parent catalog 2. have **USE_CATALOG** on the
-        table's parent catalog and be an owner of the table's parent schema 3. have the following permissions:
-        - **USE_CATALOG** on the table's parent catalog - **USE_SCHEMA** on the table's parent schema - be an
-        owner of the table
-        
-        Additionally, the call must be made from the workspace where the monitor was created.
-        
-        :param full_name: str
-          Full name of the table.
-        :param refresh_id: str
-          ID of the refresh.
-        
-        
-        """
-
-        headers = {}
-
-        self._api.do('POST',
-                     f'/api/2.1/unity-catalog/tables/{full_name}/monitor/refreshes/{refresh_id}/cancel',
-                     headers=headers)
-
-    def create(self,
-               full_name: str,
-               assets_dir: str,
-               output_schema_name: str,
-               *,
-               baseline_table_name: Optional[str] = None,
-               custom_metrics: Optional[List[MonitorCustomMetric]] = None,
-               data_classification_config: Optional[MonitorDataClassificationConfig] = None,
-               inference_log: Optional[MonitorInferenceLogProfileType] = None,
-               notifications: Optional[MonitorNotificationsConfig] = None,
-               schedule: Optional[MonitorCronSchedule] = None,
-               skip_builtin_dashboard: Optional[bool] = None,
-               slicing_exprs: Optional[List[str]] = None,
-               snapshot: Optional[MonitorSnapshotProfileType] = None,
-               time_series: Optional[MonitorTimeSeriesProfileType] = None,
-               warehouse_id: Optional[str] = None) -> MonitorInfo:
-        """Create a table monitor.
-        
-        Creates a new monitor for the specified table.
-        
-        The caller must either: 1. be an owner of the table's parent catalog, have **USE_SCHEMA** on the
-        table's parent schema, and have **SELECT** access on the table 2. have **USE_CATALOG** on the table's
-        parent catalog, be an owner of the table's parent schema, and have **SELECT** access on the table. 3.
-        have the following permissions: - **USE_CATALOG** on the table's parent catalog - **USE_SCHEMA** on
-        the table's parent schema - be an owner of the table.
-        
-        Workspace assets, such as the dashboard, will be created in the workspace where this call was made.
-        
-        :param full_name: str
-          Full name of the table.
-        :param assets_dir: str
-          The directory to store monitoring assets (e.g. dashboard, metric tables).
-        :param output_schema_name: str
-          Schema where output metric tables are created.
-        :param baseline_table_name: str (optional)
-          Name of the baseline table from which drift metrics are computed from. Columns in the monitored
-          table should also be present in the baseline table.
-        :param custom_metrics: List[:class:`MonitorCustomMetric`] (optional)
-          Custom metrics to compute on the monitored table. These can be aggregate metrics, derived metrics
-          (from already computed aggregate metrics), or drift metrics (comparing metrics across time windows).
-        :param data_classification_config: :class:`MonitorDataClassificationConfig` (optional)
-          The data classification config for the monitor.
-        :param inference_log: :class:`MonitorInferenceLogProfileType` (optional)
-          Configuration for monitoring inference logs.
-        :param notifications: :class:`MonitorNotificationsConfig` (optional)
-          The notification settings for the monitor.
-        :param schedule: :class:`MonitorCronSchedule` (optional)
-          The schedule for automatically updating and refreshing metric tables.
-        :param skip_builtin_dashboard: bool (optional)
-          Whether to skip creating a default dashboard summarizing data quality metrics.
-        :param slicing_exprs: List[str] (optional)
-          List of column expressions to slice data with for targeted analysis. The data is grouped by each
-          expression independently, resulting in a separate slice for each predicate and its complements. For
-          high-cardinality columns, only the top 100 unique values by frequency will generate slices.
-        :param snapshot: :class:`MonitorSnapshotProfileType` (optional)
-          Configuration for monitoring snapshot tables.
-        :param time_series: :class:`MonitorTimeSeriesProfileType` (optional)
-          Configuration for monitoring time series tables.
-        :param warehouse_id: str (optional)
-          Optional argument to specify the warehouse for dashboard creation. If not specified, the first
-          running warehouse will be used.
-        
-        :returns: :class:`MonitorInfo`
-        """
-        body = {}
-        if assets_dir is not None: body['assets_dir'] = assets_dir
-        if baseline_table_name is not None: body['baseline_table_name'] = baseline_table_name
-        if custom_metrics is not None: body['custom_metrics'] = [v.as_dict() for v in custom_metrics]
-        if data_classification_config is not None:
-            body['data_classification_config'] = data_classification_config.as_dict()
-        if inference_log is not None: body['inference_log'] = inference_log.as_dict()
-        if notifications is not None: body['notifications'] = notifications.as_dict()
-        if output_schema_name is not None: body['output_schema_name'] = output_schema_name
-        if schedule is not None: body['schedule'] = schedule.as_dict()
-        if skip_builtin_dashboard is not None: body['skip_builtin_dashboard'] = skip_builtin_dashboard
-        if slicing_exprs is not None: body['slicing_exprs'] = [v for v in slicing_exprs]
-        if snapshot is not None: body['snapshot'] = snapshot.as_dict()
-        if time_series is not None: body['time_series'] = time_series.as_dict()
-        if warehouse_id is not None: body['warehouse_id'] = warehouse_id
-        headers = {'Accept': 'application/json', 'Content-Type': 'application/json', }
-
-        res = self._api.do('POST',
-                           f'/api/2.1/unity-catalog/tables/{full_name}/monitor',
-                           body=body,
-                           headers=headers)
-        return MonitorInfo.from_dict(res)
-
-    def delete(self, full_name: str):
-        """Delete a table monitor.
-        
-        Deletes a monitor for the specified table.
-        
-        The caller must either: 1. be an owner of the table's parent catalog 2. have **USE_CATALOG** on the
-        table's parent catalog and be an owner of the table's parent schema 3. have the following permissions:
-        - **USE_CATALOG** on the table's parent catalog - **USE_SCHEMA** on the table's parent schema - be an
-        owner of the table.
-        
-        Additionally, the call must be made from the workspace where the monitor was created.
-        
-        Note that the metric tables and dashboard will not be deleted as part of this call; those assets must
-        be manually cleaned up (if desired).
-        
-        :param full_name: str
-          Full name of the table.
-        
-        
-        """
-
-        headers = {}
-
-        self._api.do('DELETE', f'/api/2.1/unity-catalog/tables/{full_name}/monitor', headers=headers)
-
-    def get(self, full_name: str) -> MonitorInfo:
-        """Get a table monitor.
-        
-        Gets a monitor for the specified table.
-        
-        The caller must either: 1. be an owner of the table's parent catalog 2. have **USE_CATALOG** on the
-        table's parent catalog and be an owner of the table's parent schema. 3. have the following
-        permissions: - **USE_CATALOG** on the table's parent catalog - **USE_SCHEMA** on the table's parent
-        schema - **SELECT** privilege on the table.
-        
-        The returned information includes configuration values, as well as information on assets created by
-        the monitor. Some information (e.g., dashboard) may be filtered out if the caller is in a different
-        workspace than where the monitor was created.
-        
-        :param full_name: str
-          Full name of the table.
-        
-        :returns: :class:`MonitorInfo`
-        """
-
-        headers = {'Accept': 'application/json', }
-
-        res = self._api.do('GET', f'/api/2.1/unity-catalog/tables/{full_name}/monitor', headers=headers)
-        return MonitorInfo.from_dict(res)
-
-    def get_refresh(self, full_name: str, refresh_id: str) -> MonitorRefreshInfo:
-        """Get refresh.
-        
-        Gets info about a specific monitor refresh using the given refresh ID.
-        
-        The caller must either: 1. be an owner of the table's parent catalog 2. have **USE_CATALOG** on the
-        table's parent catalog and be an owner of the table's parent schema 3. have the following permissions:
-        - **USE_CATALOG** on the table's parent catalog - **USE_SCHEMA** on the table's parent schema -
-        **SELECT** privilege on the table.
-        
-        Additionally, the call must be made from the workspace where the monitor was created.
-        
-        :param full_name: str
-          Full name of the table.
-        :param refresh_id: str
-          ID of the refresh.
-        
-        :returns: :class:`MonitorRefreshInfo`
-        """
-
-        headers = {'Accept': 'application/json', }
-
-        res = self._api.do('GET',
-                           f'/api/2.1/unity-catalog/tables/{full_name}/monitor/refreshes/{refresh_id}',
-                           headers=headers)
-        return MonitorRefreshInfo.from_dict(res)
-
-    def list_refreshes(self, full_name: str) -> Iterator[MonitorRefreshInfo]:
-        """List refreshes.
-        
-        Gets an array containing the history of the most recent refreshes (up to 25) for this table.
-        
-        The caller must either: 1. be an owner of the table's parent catalog 2. have **USE_CATALOG** on the
-        table's parent catalog and be an owner of the table's parent schema 3. have the following permissions:
-        - **USE_CATALOG** on the table's parent catalog - **USE_SCHEMA** on the table's parent schema -
-        **SELECT** privilege on the table.
-        
-        Additionally, the call must be made from the workspace where the monitor was created.
-        
-        :param full_name: str
-          Full name of the table.
-        
-        :returns: Iterator over :class:`MonitorRefreshInfo`
-        """
-
-        headers = {'Accept': 'application/json', }
-
-        res = self._api.do('GET',
-                           f'/api/2.1/unity-catalog/tables/{full_name}/monitor/refreshes',
-                           headers=headers)
-        return [MonitorRefreshInfo.from_dict(v) for v in res]
-
-    def run_refresh(self, full_name: str) -> MonitorRefreshInfo:
-        """Queue a metric refresh for a monitor.
-        
-        Queues a metric refresh on the monitor for the specified table. The refresh will execute in the
-        background.
-        
-        The caller must either: 1. be an owner of the table's parent catalog 2. have **USE_CATALOG** on the
-        table's parent catalog and be an owner of the table's parent schema 3. have the following permissions:
-        - **USE_CATALOG** on the table's parent catalog - **USE_SCHEMA** on the table's parent schema - be an
-        owner of the table
-        
-        Additionally, the call must be made from the workspace where the monitor was created.
-        
-        :param full_name: str
-          Full name of the table.
-        
-        :returns: :class:`MonitorRefreshInfo`
-        """
-
-        headers = {'Accept': 'application/json', }
-
-        res = self._api.do('POST',
-                           f'/api/2.1/unity-catalog/tables/{full_name}/monitor/refreshes',
-                           headers=headers)
-        return MonitorRefreshInfo.from_dict(res)
-
-    def update(self,
-               full_name: str,
-               output_schema_name: str,
-               *,
-               baseline_table_name: Optional[str] = None,
-               custom_metrics: Optional[List[MonitorCustomMetric]] = None,
-               data_classification_config: Optional[MonitorDataClassificationConfig] = None,
-               inference_log: Optional[MonitorInferenceLogProfileType] = None,
-               notifications: Optional[MonitorNotificationsConfig] = None,
-               schedule: Optional[MonitorCronSchedule] = None,
-               slicing_exprs: Optional[List[str]] = None,
-               snapshot: Optional[MonitorSnapshotProfileType] = None,
-               time_series: Optional[MonitorTimeSeriesProfileType] = None) -> MonitorInfo:
-        """Update a table monitor.
-        
-        Updates a monitor for the specified table.
-        
-        The caller must either: 1. be an owner of the table's parent catalog 2. have **USE_CATALOG** on the
-        table's parent catalog and be an owner of the table's parent schema 3. have the following permissions:
-        - **USE_CATALOG** on the table's parent catalog - **USE_SCHEMA** on the table's parent schema - be an
-        owner of the table.
-        
-        Additionally, the call must be made from the workspace where the monitor was created, and the caller
-        must be the original creator of the monitor.
-        
-        Certain configuration fields, such as output asset identifiers, cannot be updated.
-        
-        :param full_name: str
-          Full name of the table.
-        :param output_schema_name: str
-          Schema where output metric tables are created.
-        :param baseline_table_name: str (optional)
-          Name of the baseline table from which drift metrics are computed from. Columns in the monitored
-          table should also be present in the baseline table.
-        :param custom_metrics: List[:class:`MonitorCustomMetric`] (optional)
-          Custom metrics to compute on the monitored table. These can be aggregate metrics, derived metrics
-          (from already computed aggregate metrics), or drift metrics (comparing metrics across time windows).
-        :param data_classification_config: :class:`MonitorDataClassificationConfig` (optional)
-          The data classification config for the monitor.
-        :param inference_log: :class:`MonitorInferenceLogProfileType` (optional)
-          Configuration for monitoring inference logs.
-        :param notifications: :class:`MonitorNotificationsConfig` (optional)
-          The notification settings for the monitor.
-        :param schedule: :class:`MonitorCronSchedule` (optional)
-          The schedule for automatically updating and refreshing metric tables.
-        :param slicing_exprs: List[str] (optional)
-          List of column expressions to slice data with for targeted analysis. The data is grouped by each
-          expression independently, resulting in a separate slice for each predicate and its complements. For
-          high-cardinality columns, only the top 100 unique values by frequency will generate slices.
-        :param snapshot: :class:`MonitorSnapshotProfileType` (optional)
-          Configuration for monitoring snapshot tables.
-        :param time_series: :class:`MonitorTimeSeriesProfileType` (optional)
-          Configuration for monitoring time series tables.
-        
-        :returns: :class:`MonitorInfo`
-        """
-        body = {}
-        if baseline_table_name is not None: body['baseline_table_name'] = baseline_table_name
-        if custom_metrics is not None: body['custom_metrics'] = [v.as_dict() for v in custom_metrics]
-        if data_classification_config is not None:
-            body['data_classification_config'] = data_classification_config.as_dict()
-        if inference_log is not None: body['inference_log'] = inference_log.as_dict()
-        if notifications is not None: body['notifications'] = notifications.as_dict()
-        if output_schema_name is not None: body['output_schema_name'] = output_schema_name
-        if schedule is not None: body['schedule'] = schedule.as_dict()
-        if slicing_exprs is not None: body['slicing_exprs'] = [v for v in slicing_exprs]
-        if snapshot is not None: body['snapshot'] = snapshot.as_dict()
-        if time_series is not None: body['time_series'] = time_series.as_dict()
-        headers = {'Accept': 'application/json', 'Content-Type': 'application/json', }
-
-        res = self._api.do('PUT',
-                           f'/api/2.1/unity-catalog/tables/{full_name}/monitor',
-                           body=body,
-                           headers=headers)
-        return MonitorInfo.from_dict(res)
-
-
 class MetastoresAPI:
     """A metastore is the top-level container of objects in Unity Catalog. It stores data assets (tables and
     views) and the permissions that govern access to them. Databricks account admins can create metastores and
@@ -7193,8 +7085,9 @@ class MetastoresAPI:
         :param name: str
           The user-specified name of the metastore.
         :param region: str (optional)
-          Cloud region which the metastore serves (e.g., `us-west-2`, `westus`). If this field is omitted, the
-          region of the workspace receiving the request will be used.
+          Cloud region which the metastore serves (e.g., `us-west-2`, `westus`). The field can be omitted in
+          the __workspace-level__ __API__ but not in the __account-level__ __API__. If this field is omitted,
+          the region of the workspace receiving the request will be used.
         :param storage_root: str (optional)
           The storage root URL for metastore
         
@@ -7503,7 +7396,8 @@ class ModelVersionsAPI:
         response. For the latter case, the caller must also be the owner or have the **USE_CATALOG** privilege
         on the parent catalog and the **USE_SCHEMA** privilege on the parent schema.
         
-        There is no guarantee of a specific ordering of the elements in the response.
+        There is no guarantee of a specific ordering of the elements in the response. The elements in the
+        response will not contain any aliases or tags.
         
         :param full_name: str
           The full three-level name of the registered model under which to list model versions
@@ -7629,6 +7523,340 @@ class OnlineTablesAPI:
 
         res = self._api.do('GET', f'/api/2.0/online-tables/{name}', headers=headers)
         return OnlineTable.from_dict(res)
+
+
+class QualityMonitorsAPI:
+    """A monitor computes and monitors data or model quality metrics for a table over time. It generates metrics
+    tables and a dashboard that you can use to monitor table health and set alerts.
+    
+    Most write operations require the user to be the owner of the table (or its parent schema or parent
+    catalog). Viewing the dashboard, computed metrics, or monitor configuration only requires the user to have
+    **SELECT** privileges on the table (along with **USE_SCHEMA** and **USE_CATALOG**)."""
+
+    def __init__(self, api_client):
+        self._api = api_client
+
+    def cancel_refresh(self, table_name: str, refresh_id: str):
+        """Cancel refresh.
+        
+        Cancel an active monitor refresh for the given refresh ID.
+        
+        The caller must either: 1. be an owner of the table's parent catalog 2. have **USE_CATALOG** on the
+        table's parent catalog and be an owner of the table's parent schema 3. have the following permissions:
+        - **USE_CATALOG** on the table's parent catalog - **USE_SCHEMA** on the table's parent schema - be an
+        owner of the table
+        
+        Additionally, the call must be made from the workspace where the monitor was created.
+        
+        :param table_name: str
+          Full name of the table.
+        :param refresh_id: str
+          ID of the refresh.
+        
+        
+        """
+
+        headers = {}
+
+        self._api.do('POST',
+                     f'/api/2.1/unity-catalog/tables/{table_name}/monitor/refreshes/{refresh_id}/cancel',
+                     headers=headers)
+
+    def create(self,
+               table_name: str,
+               assets_dir: str,
+               output_schema_name: str,
+               *,
+               baseline_table_name: Optional[str] = None,
+               custom_metrics: Optional[List[MonitorMetric]] = None,
+               data_classification_config: Optional[MonitorDataClassificationConfig] = None,
+               inference_log: Optional[MonitorInferenceLog] = None,
+               notifications: Optional[MonitorNotifications] = None,
+               schedule: Optional[MonitorCronSchedule] = None,
+               skip_builtin_dashboard: Optional[bool] = None,
+               slicing_exprs: Optional[List[str]] = None,
+               snapshot: Optional[MonitorSnapshot] = None,
+               time_series: Optional[MonitorTimeSeries] = None,
+               warehouse_id: Optional[str] = None) -> MonitorInfo:
+        """Create a table monitor.
+        
+        Creates a new monitor for the specified table.
+        
+        The caller must either: 1. be an owner of the table's parent catalog, have **USE_SCHEMA** on the
+        table's parent schema, and have **SELECT** access on the table 2. have **USE_CATALOG** on the table's
+        parent catalog, be an owner of the table's parent schema, and have **SELECT** access on the table. 3.
+        have the following permissions: - **USE_CATALOG** on the table's parent catalog - **USE_SCHEMA** on
+        the table's parent schema - be an owner of the table.
+        
+        Workspace assets, such as the dashboard, will be created in the workspace where this call was made.
+        
+        :param table_name: str
+          Full name of the table.
+        :param assets_dir: str
+          The directory to store monitoring assets (e.g. dashboard, metric tables).
+        :param output_schema_name: str
+          Schema where output metric tables are created.
+        :param baseline_table_name: str (optional)
+          Name of the baseline table from which drift metrics are computed from. Columns in the monitored
+          table should also be present in the baseline table.
+        :param custom_metrics: List[:class:`MonitorMetric`] (optional)
+          Custom metrics to compute on the monitored table. These can be aggregate metrics, derived metrics
+          (from already computed aggregate metrics), or drift metrics (comparing metrics across time windows).
+        :param data_classification_config: :class:`MonitorDataClassificationConfig` (optional)
+          The data classification config for the monitor.
+        :param inference_log: :class:`MonitorInferenceLog` (optional)
+          Configuration for monitoring inference logs.
+        :param notifications: :class:`MonitorNotifications` (optional)
+          The notification settings for the monitor.
+        :param schedule: :class:`MonitorCronSchedule` (optional)
+          The schedule for automatically updating and refreshing metric tables.
+        :param skip_builtin_dashboard: bool (optional)
+          Whether to skip creating a default dashboard summarizing data quality metrics.
+        :param slicing_exprs: List[str] (optional)
+          List of column expressions to slice data with for targeted analysis. The data is grouped by each
+          expression independently, resulting in a separate slice for each predicate and its complements. For
+          high-cardinality columns, only the top 100 unique values by frequency will generate slices.
+        :param snapshot: :class:`MonitorSnapshot` (optional)
+          Configuration for monitoring snapshot tables.
+        :param time_series: :class:`MonitorTimeSeries` (optional)
+          Configuration for monitoring time series tables.
+        :param warehouse_id: str (optional)
+          Optional argument to specify the warehouse for dashboard creation. If not specified, the first
+          running warehouse will be used.
+        
+        :returns: :class:`MonitorInfo`
+        """
+        body = {}
+        if assets_dir is not None: body['assets_dir'] = assets_dir
+        if baseline_table_name is not None: body['baseline_table_name'] = baseline_table_name
+        if custom_metrics is not None: body['custom_metrics'] = [v.as_dict() for v in custom_metrics]
+        if data_classification_config is not None:
+            body['data_classification_config'] = data_classification_config.as_dict()
+        if inference_log is not None: body['inference_log'] = inference_log.as_dict()
+        if notifications is not None: body['notifications'] = notifications.as_dict()
+        if output_schema_name is not None: body['output_schema_name'] = output_schema_name
+        if schedule is not None: body['schedule'] = schedule.as_dict()
+        if skip_builtin_dashboard is not None: body['skip_builtin_dashboard'] = skip_builtin_dashboard
+        if slicing_exprs is not None: body['slicing_exprs'] = [v for v in slicing_exprs]
+        if snapshot is not None: body['snapshot'] = snapshot.as_dict()
+        if time_series is not None: body['time_series'] = time_series.as_dict()
+        if warehouse_id is not None: body['warehouse_id'] = warehouse_id
+        headers = {'Accept': 'application/json', 'Content-Type': 'application/json', }
+
+        res = self._api.do('POST',
+                           f'/api/2.1/unity-catalog/tables/{table_name}/monitor',
+                           body=body,
+                           headers=headers)
+        return MonitorInfo.from_dict(res)
+
+    def delete(self, table_name: str):
+        """Delete a table monitor.
+        
+        Deletes a monitor for the specified table.
+        
+        The caller must either: 1. be an owner of the table's parent catalog 2. have **USE_CATALOG** on the
+        table's parent catalog and be an owner of the table's parent schema 3. have the following permissions:
+        - **USE_CATALOG** on the table's parent catalog - **USE_SCHEMA** on the table's parent schema - be an
+        owner of the table.
+        
+        Additionally, the call must be made from the workspace where the monitor was created.
+        
+        Note that the metric tables and dashboard will not be deleted as part of this call; those assets must
+        be manually cleaned up (if desired).
+        
+        :param table_name: str
+          Full name of the table.
+        
+        
+        """
+
+        headers = {}
+
+        self._api.do('DELETE', f'/api/2.1/unity-catalog/tables/{table_name}/monitor', headers=headers)
+
+    def get(self, table_name: str) -> MonitorInfo:
+        """Get a table monitor.
+        
+        Gets a monitor for the specified table.
+        
+        The caller must either: 1. be an owner of the table's parent catalog 2. have **USE_CATALOG** on the
+        table's parent catalog and be an owner of the table's parent schema. 3. have the following
+        permissions: - **USE_CATALOG** on the table's parent catalog - **USE_SCHEMA** on the table's parent
+        schema - **SELECT** privilege on the table.
+        
+        The returned information includes configuration values, as well as information on assets created by
+        the monitor. Some information (e.g., dashboard) may be filtered out if the caller is in a different
+        workspace than where the monitor was created.
+        
+        :param table_name: str
+          Full name of the table.
+        
+        :returns: :class:`MonitorInfo`
+        """
+
+        headers = {'Accept': 'application/json', }
+
+        res = self._api.do('GET', f'/api/2.1/unity-catalog/tables/{table_name}/monitor', headers=headers)
+        return MonitorInfo.from_dict(res)
+
+    def get_refresh(self, table_name: str, refresh_id: str) -> MonitorRefreshInfo:
+        """Get refresh.
+        
+        Gets info about a specific monitor refresh using the given refresh ID.
+        
+        The caller must either: 1. be an owner of the table's parent catalog 2. have **USE_CATALOG** on the
+        table's parent catalog and be an owner of the table's parent schema 3. have the following permissions:
+        - **USE_CATALOG** on the table's parent catalog - **USE_SCHEMA** on the table's parent schema -
+        **SELECT** privilege on the table.
+        
+        Additionally, the call must be made from the workspace where the monitor was created.
+        
+        :param table_name: str
+          Full name of the table.
+        :param refresh_id: str
+          ID of the refresh.
+        
+        :returns: :class:`MonitorRefreshInfo`
+        """
+
+        headers = {'Accept': 'application/json', }
+
+        res = self._api.do('GET',
+                           f'/api/2.1/unity-catalog/tables/{table_name}/monitor/refreshes/{refresh_id}',
+                           headers=headers)
+        return MonitorRefreshInfo.from_dict(res)
+
+    def list_refreshes(self, table_name: str) -> MonitorRefreshListResponse:
+        """List refreshes.
+        
+        Gets an array containing the history of the most recent refreshes (up to 25) for this table.
+        
+        The caller must either: 1. be an owner of the table's parent catalog 2. have **USE_CATALOG** on the
+        table's parent catalog and be an owner of the table's parent schema 3. have the following permissions:
+        - **USE_CATALOG** on the table's parent catalog - **USE_SCHEMA** on the table's parent schema -
+        **SELECT** privilege on the table.
+        
+        Additionally, the call must be made from the workspace where the monitor was created.
+        
+        :param table_name: str
+          Full name of the table.
+        
+        :returns: :class:`MonitorRefreshListResponse`
+        """
+
+        headers = {'Accept': 'application/json', }
+
+        res = self._api.do('GET',
+                           f'/api/2.1/unity-catalog/tables/{table_name}/monitor/refreshes',
+                           headers=headers)
+        return MonitorRefreshListResponse.from_dict(res)
+
+    def run_refresh(self, table_name: str) -> MonitorRefreshInfo:
+        """Queue a metric refresh for a monitor.
+        
+        Queues a metric refresh on the monitor for the specified table. The refresh will execute in the
+        background.
+        
+        The caller must either: 1. be an owner of the table's parent catalog 2. have **USE_CATALOG** on the
+        table's parent catalog and be an owner of the table's parent schema 3. have the following permissions:
+        - **USE_CATALOG** on the table's parent catalog - **USE_SCHEMA** on the table's parent schema - be an
+        owner of the table
+        
+        Additionally, the call must be made from the workspace where the monitor was created.
+        
+        :param table_name: str
+          Full name of the table.
+        
+        :returns: :class:`MonitorRefreshInfo`
+        """
+
+        headers = {'Accept': 'application/json', }
+
+        res = self._api.do('POST',
+                           f'/api/2.1/unity-catalog/tables/{table_name}/monitor/refreshes',
+                           headers=headers)
+        return MonitorRefreshInfo.from_dict(res)
+
+    def update(self,
+               table_name: str,
+               output_schema_name: str,
+               *,
+               baseline_table_name: Optional[str] = None,
+               custom_metrics: Optional[List[MonitorMetric]] = None,
+               dashboard_id: Optional[str] = None,
+               data_classification_config: Optional[MonitorDataClassificationConfig] = None,
+               inference_log: Optional[MonitorInferenceLog] = None,
+               notifications: Optional[MonitorNotifications] = None,
+               schedule: Optional[MonitorCronSchedule] = None,
+               slicing_exprs: Optional[List[str]] = None,
+               snapshot: Optional[MonitorSnapshot] = None,
+               time_series: Optional[MonitorTimeSeries] = None) -> MonitorInfo:
+        """Update a table monitor.
+        
+        Updates a monitor for the specified table.
+        
+        The caller must either: 1. be an owner of the table's parent catalog 2. have **USE_CATALOG** on the
+        table's parent catalog and be an owner of the table's parent schema 3. have the following permissions:
+        - **USE_CATALOG** on the table's parent catalog - **USE_SCHEMA** on the table's parent schema - be an
+        owner of the table.
+        
+        Additionally, the call must be made from the workspace where the monitor was created, and the caller
+        must be the original creator of the monitor.
+        
+        Certain configuration fields, such as output asset identifiers, cannot be updated.
+        
+        :param table_name: str
+          Full name of the table.
+        :param output_schema_name: str
+          Schema where output metric tables are created.
+        :param baseline_table_name: str (optional)
+          Name of the baseline table from which drift metrics are computed from. Columns in the monitored
+          table should also be present in the baseline table.
+        :param custom_metrics: List[:class:`MonitorMetric`] (optional)
+          Custom metrics to compute on the monitored table. These can be aggregate metrics, derived metrics
+          (from already computed aggregate metrics), or drift metrics (comparing metrics across time windows).
+        :param dashboard_id: str (optional)
+          Id of dashboard that visualizes the computed metrics. This can be empty if the monitor is in PENDING
+          state.
+        :param data_classification_config: :class:`MonitorDataClassificationConfig` (optional)
+          The data classification config for the monitor.
+        :param inference_log: :class:`MonitorInferenceLog` (optional)
+          Configuration for monitoring inference logs.
+        :param notifications: :class:`MonitorNotifications` (optional)
+          The notification settings for the monitor.
+        :param schedule: :class:`MonitorCronSchedule` (optional)
+          The schedule for automatically updating and refreshing metric tables.
+        :param slicing_exprs: List[str] (optional)
+          List of column expressions to slice data with for targeted analysis. The data is grouped by each
+          expression independently, resulting in a separate slice for each predicate and its complements. For
+          high-cardinality columns, only the top 100 unique values by frequency will generate slices.
+        :param snapshot: :class:`MonitorSnapshot` (optional)
+          Configuration for monitoring snapshot tables.
+        :param time_series: :class:`MonitorTimeSeries` (optional)
+          Configuration for monitoring time series tables.
+        
+        :returns: :class:`MonitorInfo`
+        """
+        body = {}
+        if baseline_table_name is not None: body['baseline_table_name'] = baseline_table_name
+        if custom_metrics is not None: body['custom_metrics'] = [v.as_dict() for v in custom_metrics]
+        if dashboard_id is not None: body['dashboard_id'] = dashboard_id
+        if data_classification_config is not None:
+            body['data_classification_config'] = data_classification_config.as_dict()
+        if inference_log is not None: body['inference_log'] = inference_log.as_dict()
+        if notifications is not None: body['notifications'] = notifications.as_dict()
+        if output_schema_name is not None: body['output_schema_name'] = output_schema_name
+        if schedule is not None: body['schedule'] = schedule.as_dict()
+        if slicing_exprs is not None: body['slicing_exprs'] = [v for v in slicing_exprs]
+        if snapshot is not None: body['snapshot'] = snapshot.as_dict()
+        if time_series is not None: body['time_series'] = time_series.as_dict()
+        headers = {'Accept': 'application/json', 'Content-Type': 'application/json', }
+
+        res = self._api.do('PUT',
+                           f'/api/2.1/unity-catalog/tables/{table_name}/monitor',
+                           body=body,
+                           headers=headers)
+        return MonitorInfo.from_dict(res)
 
 
 class RegisteredModelsAPI:
@@ -7795,9 +8023,19 @@ class RegisteredModelsAPI:
           Whether to include registered models in the response for which the principal can only access
           selective metadata for
         :param max_results: int (optional)
-          Max number of registered models to return. If catalog and schema are unspecified, max_results must
-          be specified. If max_results is unspecified, we return all results, starting from the page specified
-          by page_token.
+          Max number of registered models to return.
+          
+          If both catalog and schema are specified: - when max_results is not specified, the page length is
+          set to a server configured value (10000, as of 4/2/2024). - when set to a value greater than 0, the
+          page length is the minimum of this value and a server configured value (10000, as of 4/2/2024); -
+          when set to 0, the page length is set to a server configured value (10000, as of 4/2/2024); - when
+          set to a value less than 0, an invalid parameter error is returned;
+          
+          If neither schema nor catalog is specified: - when max_results is not specified, the page length is
+          set to a server configured value (100, as of 4/2/2024). - when set to a value greater than 0, the
+          page length is the minimum of this value and a server configured value (1000, as of 4/2/2024); -
+          when set to 0, the page length is set to a server configured value (100, as of 4/2/2024); - when set
+          to a value less than 0, an invalid parameter error is returned;
         :param page_token: str (optional)
           Opaque token to send for the next page of results (pagination).
         :param schema_name: str (optional)
@@ -8079,7 +8317,7 @@ class StorageCredentialsAPI:
                name: str,
                *,
                aws_iam_role: Optional[AwsIamRoleRequest] = None,
-               azure_managed_identity: Optional[AzureManagedIdentity] = None,
+               azure_managed_identity: Optional[AzureManagedIdentityRequest] = None,
                azure_service_principal: Optional[AzureServicePrincipal] = None,
                cloudflare_api_token: Optional[CloudflareApiToken] = None,
                comment: Optional[str] = None,
@@ -8094,7 +8332,7 @@ class StorageCredentialsAPI:
           The credential name. The name must be unique within the metastore.
         :param aws_iam_role: :class:`AwsIamRoleRequest` (optional)
           The AWS IAM role configuration.
-        :param azure_managed_identity: :class:`AzureManagedIdentity` (optional)
+        :param azure_managed_identity: :class:`AzureManagedIdentityRequest` (optional)
           The Azure managed identity configuration.
         :param azure_service_principal: :class:`AzureServicePrincipal` (optional)
           The Azure service principal configuration.
@@ -8103,7 +8341,7 @@ class StorageCredentialsAPI:
         :param comment: str (optional)
           Comment associated with the credential.
         :param databricks_gcp_service_account: :class:`DatabricksGcpServiceAccountRequest` (optional)
-          The <Databricks> managed GCP service account configuration.
+          The Databricks managed GCP service account configuration.
         :param read_only: bool (optional)
           Whether the storage credential is only usable for read operations.
         :param skip_validation: bool (optional)
@@ -8213,12 +8451,13 @@ class StorageCredentialsAPI:
                name: str,
                *,
                aws_iam_role: Optional[AwsIamRoleRequest] = None,
-               azure_managed_identity: Optional[AzureManagedIdentity] = None,
+               azure_managed_identity: Optional[AzureManagedIdentityResponse] = None,
                azure_service_principal: Optional[AzureServicePrincipal] = None,
                cloudflare_api_token: Optional[CloudflareApiToken] = None,
                comment: Optional[str] = None,
                databricks_gcp_service_account: Optional[DatabricksGcpServiceAccountRequest] = None,
                force: Optional[bool] = None,
+               isolation_mode: Optional[IsolationMode] = None,
                new_name: Optional[str] = None,
                owner: Optional[str] = None,
                read_only: Optional[bool] = None,
@@ -8231,7 +8470,7 @@ class StorageCredentialsAPI:
           Name of the storage credential.
         :param aws_iam_role: :class:`AwsIamRoleRequest` (optional)
           The AWS IAM role configuration.
-        :param azure_managed_identity: :class:`AzureManagedIdentity` (optional)
+        :param azure_managed_identity: :class:`AzureManagedIdentityResponse` (optional)
           The Azure managed identity configuration.
         :param azure_service_principal: :class:`AzureServicePrincipal` (optional)
           The Azure service principal configuration.
@@ -8240,9 +8479,11 @@ class StorageCredentialsAPI:
         :param comment: str (optional)
           Comment associated with the credential.
         :param databricks_gcp_service_account: :class:`DatabricksGcpServiceAccountRequest` (optional)
-          The <Databricks> managed GCP service account configuration.
+          The Databricks managed GCP service account configuration.
         :param force: bool (optional)
           Force update even if there are dependent external locations or external tables.
+        :param isolation_mode: :class:`IsolationMode` (optional)
+          Whether the current securable is accessible from all workspaces or a specific set of workspaces.
         :param new_name: str (optional)
           New name for the storage credential.
         :param owner: str (optional)
@@ -8265,6 +8506,7 @@ class StorageCredentialsAPI:
         if databricks_gcp_service_account is not None:
             body['databricks_gcp_service_account'] = databricks_gcp_service_account.as_dict()
         if force is not None: body['force'] = force
+        if isolation_mode is not None: body['isolation_mode'] = isolation_mode.value
         if new_name is not None: body['new_name'] = new_name
         if owner is not None: body['owner'] = owner
         if read_only is not None: body['read_only'] = read_only
@@ -8280,7 +8522,7 @@ class StorageCredentialsAPI:
     def validate(self,
                  *,
                  aws_iam_role: Optional[AwsIamRoleRequest] = None,
-                 azure_managed_identity: Optional[AzureManagedIdentity] = None,
+                 azure_managed_identity: Optional[AzureManagedIdentityRequest] = None,
                  azure_service_principal: Optional[AzureServicePrincipal] = None,
                  cloudflare_api_token: Optional[CloudflareApiToken] = None,
                  databricks_gcp_service_account: Optional[DatabricksGcpServiceAccountRequest] = None,
@@ -8302,7 +8544,7 @@ class StorageCredentialsAPI:
         
         :param aws_iam_role: :class:`AwsIamRoleRequest` (optional)
           The AWS IAM role configuration.
-        :param azure_managed_identity: :class:`AzureManagedIdentity` (optional)
+        :param azure_managed_identity: :class:`AzureManagedIdentityRequest` (optional)
           The Azure managed identity configuration.
         :param azure_service_principal: :class:`AzureServicePrincipal` (optional)
           The Azure service principal configuration.
@@ -8350,7 +8592,7 @@ class SystemSchemasAPI:
     def __init__(self, api_client):
         self._api = api_client
 
-    def disable(self, metastore_id: str, schema_name: DisableSchemaName):
+    def disable(self, metastore_id: str, schema_name: str):
         """Disable a system schema.
         
         Disables the system schema and removes it from the system catalog. The caller must be an account admin
@@ -8358,7 +8600,7 @@ class SystemSchemasAPI:
         
         :param metastore_id: str
           The metastore ID under which the system schema lives.
-        :param schema_name: :class:`DisableSchemaName`
+        :param schema_name: str
           Full name of the system schema.
         
         
@@ -8367,10 +8609,10 @@ class SystemSchemasAPI:
         headers = {'Accept': 'application/json', }
 
         self._api.do('DELETE',
-                     f'/api/2.1/unity-catalog/metastores/{metastore_id}/systemschemas/{schema_name.value}',
+                     f'/api/2.1/unity-catalog/metastores/{metastore_id}/systemschemas/{schema_name}',
                      headers=headers)
 
-    def enable(self, metastore_id: str, schema_name: EnableSchemaName):
+    def enable(self, metastore_id: str, schema_name: str):
         """Enable a system schema.
         
         Enables the system schema and adds it to the system catalog. The caller must be an account admin or a
@@ -8378,7 +8620,7 @@ class SystemSchemasAPI:
         
         :param metastore_id: str
           The metastore ID under which the system schema lives.
-        :param schema_name: :class:`EnableSchemaName`
+        :param schema_name: str
           Full name of the system schema.
         
         
@@ -8387,7 +8629,7 @@ class SystemSchemasAPI:
         headers = {'Accept': 'application/json', }
 
         self._api.do('PUT',
-                     f'/api/2.1/unity-catalog/metastores/{metastore_id}/systemschemas/{schema_name.value}',
+                     f'/api/2.1/unity-catalog/metastores/{metastore_id}/systemschemas/{schema_name}',
                      headers=headers)
 
     def list(self, metastore_id: str) -> Iterator[SystemSchemaInfo]:
